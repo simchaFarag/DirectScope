@@ -1,14 +1,13 @@
-import { AlertTriangle, ClipboardList, Lightbulb, Pencil } from 'lucide-react';
+import { Icon } from '@/components/FigmaIcon';
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heading, SubScreen } from '@/components/layout';
-import { General, MoneyBag, StageGlyph } from '@/components/icons';
-import { BottomActions, Button, Field, IconButton, Pills, UploadSlot } from '@/components/ui';
+import { General, StageGlyph } from '@/components/icons';
+import { BottomActions, Button, ClearField, Field, Select, UploadSlot } from '@/components/ui';
 import { useStore } from '@/data/store';
 import type { ProjectType } from '@/data/types';
 import { pickDocument } from '@/lib/files';
 import { cn, ils, stageLabel } from '@/lib/format';
-import { ClearField } from './Auth';
 
 const types: { value: ProjectType; label: string }[] = [
   { value: 'renovation', label: 'שיפוץ דירה' },
@@ -30,18 +29,15 @@ export function ProjectDetails() {
   return (
     <SubScreen title="הקמת פרויקט" step={{ n: 1, of: 4 }}>
       <Heading title="פרטי הפרויקט" sub="מי ? מה ? ואיפה .." />
-      <div className="space-y-5 px-6">
-        <Field label="שם הפרויקט" value={name} onChange={(e) => setName(e.target.value)} placeholder="כתוב כאן" />
-        <div>
-          <p className="mb-2 text-caption text-muted">פירוט על הפרויקט, מה בונים?</p>
-          <Pills options={types} value={type} onChange={setType} />
+      {/* Figma "login-step 4 / 13": placeholder-only fields 24px apart; the type dropdown with the extra description 8px under it */}
+      <div className="flex flex-col gap-6 px-6 short:gap-4">
+        <Field aria-label="שם הפרויקט" value={name} onChange={(e) => setName(e.target.value)} placeholder="שם הפרויקט" />
+        <div className="flex flex-col gap-2">
+          <Select placeholder="פירוט על הפרויקט, מה בונים?" options={types} value={type} onChange={setType} />
+          <Field aria-label="תיאור נוסף" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="תיאור נוסף (לא חובה)" />
         </div>
-        <Field label="תיאור נוסף (לא חובה)" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="כתוב כאן" />
-        <Field label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="רחוב, מספר, עיר" />
-        <div>
-          <span className="mb-1 block text-caption text-muted">תקציב משוער (לא חובה)</span>
-          <ClearField value={budget} onChange={(v) => setBudget(v.replace(/\D/g, ''))} placeholder="₪" />
-        </div>
+        <Field aria-label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת הנכס" />
+        <ClearField value={budget && ils(+budget)} onChange={(v) => setBudget(v.replace(/\D/g, ''))} placeholder="תקציב משוער (לא חובה)" />
       </div>
       <BottomActions>
         <Button
@@ -80,16 +76,19 @@ export function UploadDocs() {
   return (
     <SubScreen title="הקמת פרויקט" step={{ n: 2, of: 4 }}>
       <Heading title="העלאת מסמכים" sub="השוואת נתונים ובדיקה" />
-      <div className="space-y-6 px-6">
-        <div>
-          <p className="mb-3 text-lg">
-            הצעת מחיר קבלן <span className="text-body text-muted">(ניתן להוסיף עד 2 לבדיקה)</span>
-          </p>
-          <div className="grid grid-cols-2 gap-4">{quotes.map((_, i) => slot(quotes, setQuotes, i))}</div>
-        </div>
-        <div>
-          <p className="mb-3 text-lg">תוכניות אדריכליות</p>
-          <div className="grid grid-cols-2 gap-4">{plans.map((_, i) => slot(plans, setPlans, i))}</div>
+      {/* Figma "login-step 5": two groups of 162×136 tiles (16px apart), 24px between groups, the note 40px below */}
+      <div className="flex flex-col gap-10 px-6 short:gap-6">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <p className="flex items-center gap-1 whitespace-nowrap text-lg leading-6">
+              הצעת מחיר קבלן <span className="text-body text-muted">(ניתן להוסיף עד 2 לבדיקה)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-4">{quotes.map((_, i) => slot(quotes, setQuotes, i))}</div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-lg leading-6">תוכניות אדריכליות</p>
+            <div className="grid grid-cols-2 gap-4">{plans.map((_, i) => slot(plans, setPlans, i))}</div>
+          </div>
         </div>
         <p className="text-center text-body text-muted">
           לאחר העלאת המסמכים, נשווה בין דרישות האדריכל לבין הצעות המחיר של הקבלנים. נבדוק עבורך שכל הסעיפים קיימים, נזהה הבדלי ניסוח וכמובן נבדוק מחירים
@@ -97,7 +96,7 @@ export function UploadDocs() {
       </div>
       <BottomActions>
         <Button
-          block
+          className="mx-auto w-[314px] max-w-full"
           disabled={!quotes.some(Boolean)}
           onClick={() => {
             setQuotesCount(quotes.filter(Boolean).length);
@@ -111,14 +110,15 @@ export function UploadDocs() {
   );
 }
 
+/** Figma "level card": 24px icon beside a 16px semibold title and body sub, the content 16px below */
 function InfoCard({ icon, title, sub, children }: { icon: ReactNode; title: string; sub: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-primary-100 bg-white p-4">
-      <div className="mb-3 flex gap-3">
-        <span className="mt-1 text-ink">{icon}</span>
-        <div>
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <p className="text-body text-ink">{sub}</p>
+    <section className="flex flex-col gap-4 rounded-lg border border-primary-100 p-4">
+      <div className="flex items-center gap-4">
+        <span className="shrink-0 text-primary">{icon}</span>
+        <div className="flex flex-1 flex-col gap-1">
+          <h3 className="text-lg font-semibold leading-5">{title}</h3>
+          <p className="text-body">{sub}</p>
         </div>
       </div>
       {children}
@@ -128,27 +128,29 @@ function InfoCard({ icon, title, sub, children }: { icon: ReactNode; title: stri
 
 function Bullets({ items }: { items: string[] }) {
   return (
-    <ul className="space-y-2 pr-2">
+    <ul className="flex flex-col gap-2 pr-6">
       {items.map((t) => (
         <li key={t} className="flex items-center gap-2 text-body">
-          <span className="h-1.5 w-1.5 rounded-full bg-danger" /> {t}
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-danger" /> {t}
         </li>
       ))}
     </ul>
   );
 }
 
-function MatchRing({ value, size = 104 }: { value: number; size?: number }) {
-  const r = size / 2 - 6;
+/** Match ring (login-step 14: 96px, login-step 15: 76px), light track, blue arc */
+function MatchRing({ value, size = 96 }: { value: number; size?: number }) {
+  const sw = size > 80 ? 8 : 5;
+  const r = size / 2 - sw / 2;
   const c = 2 * Math.PI * r;
   return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
+    <div className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#F2F7FE" strokeWidth="8" fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#3DA5F4" strokeWidth="8" fill="none" strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} strokeLinecap="round" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="#F2F7FE" strokeWidth={sw} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="#3DA5F4" strokeWidth={sw} fill="none" strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} strokeLinecap="round" />
       </svg>
       <div className="absolute text-center">
-        <div className="text-h3 font-semibold">{value}%</div>
+        <div className="text-lg font-semibold leading-5">{value}%</div>
         <div className="text-caption text-muted">התאמה</div>
       </div>
     </div>
@@ -163,7 +165,7 @@ export function CheckResults() {
   return (
     <SubScreen title="הקמת פרויקט" step={{ n: 3, of: 4 }}>
       <Heading title="נתוני הבדיקה" sub="סיכום ממצאי בדיקת המערכת" />
-      <div className="space-y-4 px-6">
+      <div className="flex flex-col gap-6 px-6 short:gap-4">
         {two ? (
           <>
             <div className="flex justify-center gap-8">
@@ -171,55 +173,63 @@ export function CheckResults() {
                 { l: 'קבלן א’', n: 'דן שם טוב', v: 82, best: true },
                 { l: 'קבלן ב’', n: 'האחים חסיד', v: 67 },
               ].map((q) => (
-                <div key={q.l} className={cn('flex flex-col items-center gap-2 rounded-lg p-3', q.best && 'bg-primary-50')}>
-                  <MatchRing value={q.v} size={96} />
-                  <span className="text-body font-medium">{q.l}</span>
-                  <span className="text-caption text-muted">{q.n}</span>
+                /* name and company above the ring; the recommended one has a blue outline */
+                <div key={q.l} className={cn('flex w-[110px] flex-col items-center gap-3 rounded-lg px-3 pb-4 pt-3', q.best ? 'border border-primary-300 bg-primary-50' : 'border border-transparent bg-bg')}>
+                  <div className="text-center">
+                    <p className="text-body font-medium">{q.l}</p>
+                    <p className="text-caption text-muted">{q.n}</p>
+                  </div>
+                  <MatchRing value={q.v} size={76} />
                 </div>
               ))}
             </div>
-            <div className="rounded-lg bg-accent-soft p-4">
-              <p className="text-lg font-semibold">המלצת המערכת: קבלן א’</p>
-              <p className="text-body">למרות שמחירו גבוה יותר ב-₪35,000 — הצעתו מכסה את התכנית האדריכלית בצורה מלאה יותר ואין בה סעיפים פתוחים.</p>
+            <div className="rounded-lg border border-primary-200 bg-white p-4">
+              <p className="mb-3 flex items-center gap-2 text-body font-semibold">
+                <Icon name="bulb" className="text-accent" /> המלצת המערכת: קבלן א’
+              </p>
+              <p className="text-caption leading-6">למרות שמחירו גבוה יותר ב-₪35,000 — הצעתו מכסה את התכנית האדריכלית בצורה מלאה יותר ואין בה סעיפים פתוחים.</p>
             </div>
           </>
         ) : (
+          /* Figma "login-step 14": 96px ring, then the finding chips 16px below */
           <div className="flex flex-col items-center gap-4">
             <MatchRing value={75} />
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="rounded bg-warn-soft px-2 py-1 text-caption text-warn">מחיר גבוה ב-5%</span>
-              <span className="rounded bg-danger-soft px-2 py-1 text-caption text-danger">3 סעיפים חסרים</span>
-              <span className="rounded bg-danger-soft px-2 py-1 text-caption text-danger">2 מסמכים חסרים</span>
+              <span className="flex h-6 items-center rounded px-2 text-caption text-danger bg-danger-soft">2 מסמכים חסרים</span>
+              <span className="flex h-6 items-center rounded px-2 text-caption text-danger bg-danger-soft">3 סעיפים חסרים</span>
+              <span className="flex h-6 items-center rounded bg-[#FEFAF5] px-2 text-caption text-warn">מחיר גבוה ב-5%</span>
             </div>
           </div>
         )}
 
-        <InfoCard icon={<MoneyBag size={22} />} title="הערכת עלויות" sub="המחיר שהציע הקבלן לעומת מחיר השוק עבור עבודה דומה באזורכם.">
-          <dl className="divide-y divide-line text-body">
+        <InfoCard icon={<Icon name="money" />} title="הערכת עלויות" sub="המחיר שהציע הקבלן לעומת מחיר השוק עבור עבודה דומה באזורכם.">
+          <dl className="flex flex-col gap-2 text-body">
             <Row k="הצעת הקבלן" v={ils(420000)} />
+            <Divider />
             <Row k="מחיר שוק משוקלל" v={ils(399000)} />
-            <Row k="הפרש" v={<span className="text-warn" dir="ltr">-₪ 21,000</span>} />
+            <Divider />
+            <Row k="הפרש" v={<span className="text-warn" dir="ltr">-21,000 ₪</span>} />
           </dl>
           {!two && (
-            <p className="mt-3 flex items-center justify-center gap-2 text-body">
-              <Lightbulb size={16} className="text-accent" /> כדאי לבקש הצעה מקבלן נוסף להשוואה
+            <p className="flex items-center justify-center gap-2 text-body">
+              <Icon name="bulb" size={16} className="text-accent" /> כדאי לבקש הצעה מקבלן נוסף להשוואה
             </p>
           )}
         </InfoCard>
 
-        <InfoCard icon={<ClipboardList size={22} />} title="ביצוע תכנית אדריכלית" sub="סעיפים מהתכנית שהקבלן לא התייחס אליהם בהצעת המחיר.">
+        <InfoCard icon={<Icon name="task" />} title="ביצוע תכנית אדריכלית" sub="סעיפים מהתכנית שהקבלן לא התייחס אליהם בהצעת המחיר.">
           <Bullets items={['לא כלול: טיפול בחלונות ודלתות', 'לא כלול: פירוט כמויות בצנרת']} />
         </InfoCard>
 
-        <InfoCard icon={<AlertTriangle size={22} />} title="מסמכים נדרשים" sub="מסמכים שנדרשים לצורך חוזה מחייב.">
+        <InfoCard icon={<Icon name="notice" />} title="מסמכים נדרשים" sub="מסמכים שנדרשים לצורך חוזה מחייב.">
           <Bullets items={['פירוט סופי רשתות חשמל', 'כתב כמויות / מפרט טכני', 'חסרה חתימה על תכנית אדריכלית']} />
         </InfoCard>
       </div>
       <BottomActions>
-        <Button className="flex-[2]" onClick={() => nav('/setup/budget')}>
+        <Button className="flex-1" onClick={() => nav('/setup/budget')}>
           אישור והמשך
         </Button>
-        <Button variant="outline" className="flex-1" onClick={() => nav('/setup/docs')}>
+        <Button variant="outline" className="shrink-0 px-8" onClick={() => nav('/setup/docs')}>
           תיקון
         </Button>
       </BottomActions>
@@ -227,33 +237,45 @@ export function CheckResults() {
   );
 }
 
-function Row({ k, v }: { k: string; v: ReactNode }) {
+/** Figma "divider": 8px row with a thin light-blue line */
+function Divider() {
   return (
-    <div className="flex items-center justify-between py-3">
-      <dt>{k}</dt>
-      <dd className="font-semibold">{v}</dd>
+    <div className="flex h-2 items-center">
+      <span className="h-px w-full bg-primary-100" />
     </div>
   );
 }
 
+function Row({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between whitespace-nowrap">
+      <dt>{k}</dt>
+      <dd className="font-medium leading-4 tracking-[0.042px]">{v}</dd>
+    </div>
+  );
+}
+
+/** Figma "sign in - level card": icon, label + H3 title, edit button; then budget | tasks | time split by thin lines */
 export function SplitCard({ icon, label, title, budget, tasks, duration, onEdit, soft }: { icon: ReactNode; label?: string; title: string; budget: number; tasks: number | string; duration: string; onEdit?: () => void; soft?: boolean }) {
   return (
-    <section className={cn('rounded-lg p-4', soft ? 'bg-primary-50' : 'border border-primary-100 bg-white')}>
-      <div className="mb-4 flex items-start gap-3">
-        <span className="mt-1 text-ink">{icon}</span>
+    <section className={cn('flex flex-col gap-4 rounded-lg p-4', soft ? 'bg-bg' : 'border border-primary-100')}>
+      <div className="flex items-center gap-4">
+        <span className="shrink-0 text-primary">{icon}</span>
         <div className="flex-1">
-          {label && <p className="text-body">{label}</p>}
+          {label && <p className="text-lg leading-6">{label}</p>}
           <h3 className="font-display text-h3 font-bold">{title}</h3>
         </div>
         {onEdit && (
-          <IconButton onClick={onEdit} className="h-7 w-7 shadow-none" aria-label="עריכה">
-            <Pencil size={14} />
-          </IconButton>
+          <button onClick={onEdit} className="grid h-6 w-6 shrink-0 self-start place-items-center rounded-full bg-primary-50" aria-label={`עריכת ${title}`}>
+            <Icon name="sEdit" />
+          </button>
         )}
       </div>
-      <div className="grid grid-cols-3 divide-x divide-x-reverse divide-line text-center">
+      <div className="flex items-stretch justify-center gap-4 text-center text-body">
         <Stat k="תקציב" v={ils(budget)} />
+        <span className="w-px bg-primary-100" />
         <Stat k="משימות" v={String(tasks)} />
+        <span className="w-px bg-primary-100" />
         <Stat k="זמן עבודה" v={duration} />
       </div>
     </section>
@@ -262,9 +284,9 @@ export function SplitCard({ icon, label, title, budget, tasks, duration, onEdit,
 
 function Stat({ k, v }: { k: string; v: string }) {
   return (
-    <div>
-      <p className="text-body text-muted">{k}</p>
-      <p className="mt-1 text-body font-semibold">{v}</p>
+    <div className="flex flex-col items-center gap-1.5 whitespace-nowrap">
+      <p className="text-muted">{k}</p>
+      <p className="font-medium leading-4 tracking-[0.042px]">{v}</p>
     </div>
   );
 }
@@ -278,30 +300,32 @@ export function BudgetSplit() {
   return (
     <SubScreen title="הקמת פרויקט" step={{ n: 4, of: 4 }}>
       <Heading title="חלוקה תקציבית" sub="חילקנו את הפרויקט לשלבים עיקריים לפי סדר הביצוע" />
-      <div className="space-y-4 px-6">
-        {s.stages.map((st) => (
-          <SplitCard
-            key={st.id}
-            icon={<StageGlyph icon={st.icon} size={22} />}
-            label={stageLabel(st.order)}
-            title={st.name}
-            budget={st.budget}
-            tasks={st.tasks.length}
-            duration={st.duration}
-            onEdit={() => nav(`/setup/stage/${st.id}`)}
-          />
-        ))}
-        {s.extras.map((e) => (
-          <SplitCard key={e.id} icon={<StageGlyph icon="extras" size={22} />} label="הוצאות נוספות" title={e.title} budget={e.amount} tasks={e.tasks ?? 0} duration={e.duration ?? '0'} />
-        ))}
-        <SplitCard soft icon={<General size={22} />} title="סיכום כללי" budget={total} tasks={tasks} duration={`${Math.ceil(s.stages.length * 1.5)} שבועות`} />
+      <div className="flex flex-col gap-10 px-6 short:gap-6">
+        <div className="flex flex-col gap-6 short:gap-4">
+          {s.stages.map((st) => (
+            <SplitCard
+              key={st.id}
+              icon={<StageGlyph icon={st.icon} />}
+              label={stageLabel(st.order)}
+              title={st.name}
+              budget={st.budget}
+              tasks={st.tasks.length}
+              duration={st.duration}
+              onEdit={() => nav(`/setup/stage/${st.id}`)}
+            />
+          ))}
+          {s.extras.map((e) => (
+            <SplitCard key={e.id} icon={<Icon name="addBudget" />} label="הוצאות נוספות" title={e.title} budget={e.amount} tasks={e.tasks ?? 0} duration={e.duration ?? '0'}/>
+          ))}
+          <SplitCard soft icon={<General />} title="סיכום כללי" budget={total} tasks={tasks} duration={`${Math.ceil(s.stages.length * 1.5)} שבועות`} />
+        </div>
         <p className="text-center text-body text-muted">הסכומים וגם הזמנים משוערים, ייתכנו שינויים במהלך העבודה</p>
       </div>
       <BottomActions>
-        <Button className="flex-[3]" onClick={() => nav('/setup/inspiration')}>
+        <Button className="flex-1" onClick={() => nav('/setup/inspiration')}>
           הקמת הפרויקט
         </Button>
-        <Button variant="outline" className="flex-[2]" onClick={() => nav('/setup/expense')}>
+        <Button variant="outline" className="shrink-0 px-8" onClick={() => nav('/setup/expense')}>
           הוצאה נוספת
         </Button>
       </BottomActions>

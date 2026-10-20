@@ -1,9 +1,10 @@
-import { CheckCircle2, Send, XCircle } from 'lucide-react';
+import { CheckCircle2, XCircle } from 'lucide-react';
+import { Icon } from '@/components/FigmaIcon';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
-import { Avatar, BottomActions, Button, Chip, ConfirmDialog, Lightbox, Modal, PhotoPicker, Select, TextArea } from '@/components/ui';
+import { Avatar, BottomActions, Button, ConfirmDialog, Lightbox, Modal, PhotoPicker, Select, TextArea } from '@/components/ui';
 import { useStore } from '@/data/store';
 import type { Update } from '@/data/types';
 import { cn } from '@/lib/format';
@@ -18,10 +19,10 @@ function Photos({ srcs }: { srcs: string[] }) {
   if (!srcs.length) return null;
   return (
     <>
-      <div className={cn('mt-3 grid gap-2', srcs.length > 1 && 'grid-cols-2')}>
+      <div className={cn('grid w-full gap-2', srcs.length > 1 && 'grid-cols-2')}>
         {srcs.slice(0, 4).map((src, i) => (
           <button key={i} onClick={() => setOpen(i)} className="relative overflow-hidden rounded-lg">
-            <img src={src} alt="" className={cn('w-full object-cover', srcs.length > 1 ? 'aspect-square' : 'aspect-[4/3]')} />
+            <img src={src} alt="" className={cn('w-full object-cover', srcs.length > 1 ? 'aspect-square' : 'h-[136px]')} />
             {i === 3 && srcs.length > 4 && <span className="absolute inset-0 grid place-items-center bg-ink/50 text-h2 text-white">+{srcs.length - 4}</span>}
           </button>
         ))}
@@ -50,40 +51,48 @@ export function UpdateCard({ u, compact }: { u: Update; compact?: boolean }) {
     setDraft('');
   };
 
+  /** name, then "role • time" (Figma: 14 medium / 12 muted with a 2px dot) */
+  const byline = (
+    <div className="flex flex-col items-start gap-0">
+      <p className="text-btn font-medium tracking-[0.042px]">{u.author}</p>
+      <p className="flex items-center gap-1 text-caption text-muted">
+        {u.authorTitle} <span className="h-0.5 w-0.5 rounded-full bg-muted" /> {u.time}
+      </p>
+    </div>
+  );
+
   const header = (
-    <div className="flex items-start gap-3">
-      <Avatar src={u.avatar} name={u.author} />
-      <div className="flex-1">
-        <p className="text-body font-medium">{u.author}</p>
-        <p className="text-caption text-muted">
-          {u.authorTitle} · {u.time}
-        </p>
+    <div className="flex w-full items-start gap-2">
+      <div className="flex flex-1 items-center gap-4">
+        <Avatar src={u.avatar} name={u.author} />
+        {byline}
       </div>
-      {stage && <Chip>{stage.name.split(' ')[0]}</Chip>}
+      {stage && <span className="flex h-4 items-center rounded-lg bg-primary-100 px-2 text-caption">{stage.name.split(' ')[0]}</span>}
     </div>
   );
 
   const comments = u.comments.length > 0 && (
-    <div className="mt-3 space-y-2">
+    <div className="flex w-full flex-col gap-4">
       {u.comments.map((c) => (
-        <p key={c.id} className={cn('w-fit max-w-[85%] rounded-lg px-3 py-2 text-body', c.mine ? 'bg-primary-100' : 'mr-auto bg-bg')}>
+        <p key={c.id} className={cn('w-fit max-w-[85%] rounded-lg p-2 text-body', c.mine ? 'mr-auto bg-primary-100' : 'bg-bg')}>
           {c.text}
         </p>
       ))}
     </div>
   );
 
+  /* Figma "chat": text field + 40px send button */
   const composer = (
     <form
-      className="mt-3 flex items-center gap-2"
+      className="flex w-full items-start gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         send();
       }}
     >
-      <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="כתוב כאן" className="field py-2" />
-      <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-50" aria-label="שליחה">
-        <Send size={18} className="-scale-x-100" />
+      <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="כתוב כאן" className="h-10 min-w-0 flex-1 rounded-lg border border-primary-100 bg-white px-4 text-body placeholder:text-muted focus:border-primary focus:outline-none" />
+      <button className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full', draft.trim() ? 'bg-primary text-white' : 'bg-bg text-ink')} aria-label="שליחה">
+        <Icon name="send" className="-scale-x-100" />
       </button>
     </form>
   );
@@ -103,39 +112,85 @@ export function UpdateCard({ u, compact }: { u: Update; compact?: boolean }) {
 
   return (
     <>
-      <article className={cn('rounded-2xl p-4 shadow-blue', compact && u.status === 'pending' ? 'border border-accent bg-primary-50' : 'bg-white')}>
-        {header}
-        <p className={cn('mt-3 text-body', compact && 'line-clamp-2')}>{u.text}</p>
-        {!compact && <Photos srcs={photosOf(u)} />}
-        {!compact && thread && comments}
-        {!compact && thread && composer}
-        <div className="mt-4 flex items-center justify-center gap-3">
-          {canApprove ? (
-            <Button size="sm" className="min-w-[100px]" onClick={() => setConfirm(true)}>
-              אישור
-            </Button>
-          ) : (
-            status
-          )}
-          {compact ? (
+      {compact && u.status !== 'pending' ? (
+        /* Figma "note card/old": handled update – one row, arrow opens it */
+        <button onClick={() => setOpen(true)} className="flex w-full items-center gap-4 rounded-lg bg-bg px-4 py-2 text-right">
+          <Avatar src={u.avatar} name={u.author} size={24} />
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
+            {byline}
+            <p className="w-full truncate text-body">{u.text}</p>
+          </div>
+          <span className="grid h-10 w-10 shrink-0 place-items-center">
+            <Icon name="gettin" />
+          </span>
+        </button>
+      ) : compact ? (
+        /* Figma "note card" (new): yellow outline, view + approve */
+        <article className="flex flex-col gap-4 rounded-lg border border-accent bg-bg p-4">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Avatar src={u.avatar} name={u.author} size={24} />
+              {byline}
+            </div>
+            <p className="line-clamp-2 text-body">{u.text}</p>
+          </div>
+          <div className="flex items-center justify-center gap-6">
+            {canApprove ? (
+              <Button size="sm" onClick={() => setConfirm(true)}>
+                אישור
+              </Button>
+            ) : (
+              status
+            )}
             <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
               צפה בעידכון
             </Button>
-          ) : (
+          </div>
+        </article>
+      ) : (
+        /* Figma "info card" (מסך התראות) */
+        <article className="flex flex-col items-start gap-4 rounded-2xl bg-white p-4">
+          {header}
+          <p className="w-full text-body">{u.text}</p>
+          <Photos srcs={photosOf(u)} />
+          {thread && comments}
+          {thread && composer}
+          <div className="flex w-full items-center justify-center gap-6">
+            {canApprove ? (
+              <Button size="sm" onClick={() => setConfirm(true)}>
+                אישור
+              </Button>
+            ) : (
+              status
+            )}
             <Button size="sm" variant="outline" onClick={() => setThread(!thread)}>
               {thread ? 'סגירה' : u.comments.length ? `הערות (${u.comments.length})` : 'הוסף הערה'}
             </Button>
-          )}
-        </div>
-      </article>
+          </div>
+        </article>
+      )}
 
-      <Modal open={open} onClose={() => setOpen(false)}>
-        {header}
-        <p className="mt-3 text-body">{u.text}</p>
-        <Photos srcs={photosOf(u)} />
-        {comments}
-        {composer}
-        <div className="mt-4 flex justify-center gap-3">{canApprove ? <Button onClick={() => setConfirm(true)}>אישור</Button> : status}</div>
+      {/* Figma "Popup - info card": header, text, photo, the comment bubbles, then אישור + הוסף הערה; close button on the left */}
+      <Modal open={open} onClose={() => setOpen(false)} closeLeft>
+        <div className="flex flex-col items-start gap-4">
+          {header}
+          <p className="w-full text-body">{u.text}</p>
+          <Photos srcs={photosOf(u)} />
+          {comments}
+          {thread && composer}
+          <div className="flex w-full items-center justify-center gap-6">
+            {canApprove ? (
+              <Button size="sm" onClick={() => setConfirm(true)}>
+                אישור
+              </Button>
+            ) : (
+              status
+            )}
+            <Button size="sm" variant="outline" onClick={() => setThread(!thread)}>
+              {thread ? 'סגירה' : 'הוסף הערה'}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog
@@ -173,12 +228,12 @@ export function UpdatesScreen() {
   const list = tab === 'pending' ? pending : s.updates.filter((u) => u.status !== 'pending');
   return (
     <>
-      <AppBar title="" />
-      <main className="animate-fade-up space-y-5 px-6 pb-10 pt-6">
+      <AppBar menuOnly />
+      <main className="animate-fade-up desk space-y-8 px-6 pb-10 pt-8">
         <div className="flex items-center justify-between">
-          <h1 className="font-display text-h1 font-bold">עידכונים</h1>
+          <h1 className="font-display text-h1 font-bold tracking-[-0.28px]">עידכונים</h1>
           {pending.length > 0 && (
-            <span className="rounded bg-warn px-2 py-1 text-caption font-medium text-white">
+            <span className="flex h-6 items-center rounded bg-warn px-2 text-caption font-medium text-[#FEFAF5]">
               {pending.length} {pending.length === 1 ? 'ממתין' : 'ממתינים'} {s.user.role === 'client' ? 'לאישורך' : 'לאישור'}
             </span>
           )}
@@ -186,18 +241,18 @@ export function UpdatesScreen() {
         <div className="flex justify-center">
           <Button onClick={() => nav('/app/updates/new')}>הוספת עידכון</Button>
         </div>
-        <div className="flex rounded-full bg-primary-50 p-1">
+        <div className="flex rounded-full bg-primary-50 p-1 lg:mx-auto lg:max-w-md">
           {(['pending', 'done'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={cn('h-9 flex-1 rounded-full text-body', tab === t ? 'bg-white font-medium shadow-blue' : 'text-muted')}>
               {t === 'pending' ? `ממתינים (${pending.length})` : 'טופלו'}
             </button>
           ))}
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
           {list.map((u) => (
             <UpdateCard key={u.id} u={u} />
           ))}
-          {!list.length && <p className="py-8 text-center text-body text-muted">{tab === 'pending' ? 'אין עדכונים שממתינים 🎉' : 'אין עדכונים כאן'}</p>}
+          {!list.length && <p className="py-8 text-center text-body text-muted lg:col-span-full">{tab === 'pending' ? 'אין עדכונים שממתינים 🎉' : 'אין עדכונים כאן'}</p>}
         </div>
       </main>
     </>
@@ -217,7 +272,7 @@ export function UpdateForm() {
   return (
     <SubScreen title="עידכון חדש" sheet>
       <Heading title="עידכון חדש" sub="תעד את ההתקדמות בשטח" />
-      <div className="space-y-5 px-6">
+      <div className="space-y-6 px-6">
         <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />
         <TextArea label="תיאור העידכון" value={text} onChange={(e) => setText(e.target.value)} placeholder="מה קרה היום בשטח? תאר את ההתקדמות, בעיות או הערות חשובות..." />
         <PhotoPicker photos={photos} onChange={setPhotos} />
@@ -251,7 +306,7 @@ export function ReminderForm() {
   return (
     <SubScreen title="הוספת תזכורת" sheet>
       <Heading title="הוספת תזכורת" sub="לא שוכחים כשכותבים" />
-      <div className="space-y-5 px-6">
+      <div className="space-y-6 px-6">
         <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />
         <TextArea label="תיאור התזכורת" value={text} onChange={(e) => setText(e.target.value)} placeholder="הערות חשובות, בדיקות ואולי גם רעיונות..." />
       </div>

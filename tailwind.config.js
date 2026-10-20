@@ -39,5 +39,8 @@ export default {
       maxWidth: { phone: '430px' },
     },
   },
-  plugins: [],
+  plugins: [
+    // short: short phone screens (e.g. iPhone SE) – tighter vertical spacing so the forms fit without scrolling
+    ({ addVariant }) => addVariant('short', '@media (max-height: 800px) and (max-width: 1023px)'),
+  ],
 };

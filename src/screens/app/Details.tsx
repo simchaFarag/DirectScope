@@ -133,7 +133,7 @@ export function InspirationCategory() {
   return (
     <SubScreen title="לוח השראה">
       <Heading title={category} sub={`${items.length} תמונות`} />
-      <div className="grid grid-cols-2 gap-3 px-6 pb-28">
+      <div className="grid grid-cols-2 gap-3 px-6 pb-28 lg:grid-cols-3">
         {items.map((it, i) => (
           <button key={it.id} onClick={() => setZoom(i)} className="overflow-hidden rounded-lg">
             <img src={it.image} alt="" className="aspect-square w-full object-cover" />

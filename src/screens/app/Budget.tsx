@@ -1,28 +1,48 @@
-import { ArrowUpLeft, Camera, CheckCircle2, Clock3, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppBar, Heading, StageTabs, SubScreen, TabScreen } from '@/components/layout';
 import { StageGlyph } from '@/components/icons';
-import { Avatar, BottomActions, Button, Checkbox, Chip, ConfirmDialog, Field, IconButton, Lightbox, Modal, PhotoPicker, ProgressBar, SectionTitle, Select, TextArea, UploadSlot } from '@/components/ui';
+import { Icon } from '@/components/FigmaIcon';
+import { Avatar, BottomActions, Button, Checkbox, ConfirmDialog, Field, Lightbox, Modal, PhotoPicker, ProgressBar, Select, TextArea, UploadSlot } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { pickDocument, pickImages } from '@/lib/files';
 import { stageExceptions, useStore, useTotals } from '@/data/store';
 import type { ExceptionReq } from '@/data/types';
 import { cn, fmtDate, ils, stageLabel } from '@/lib/format';
-import { ExtrasTab, Hero, stageTabs } from './Schedule';
+import { ExtrasTab, Hero, SectionHead, SmallIconButton, stageTabs } from './Schedule';
 import { useStageOptions } from './Updates';
 
-function BigRing({ value, children }: { value: number; children: React.ReactNode }) {
-  const size = 190;
-  const r = 80;
-  const c = 2 * Math.PI * r;
+/**
+ * Figma "Progress_Bar" (192×304): a thick white half ring opening to the left with the paid part in yellow from its top end.
+ * Geometry taken from the exported asset: centre (53,162), radius 136.8, 30.4 wide, spanning ±101.6°.
+ */
+function BudgetArc({ value }: { value: number }) {
+  const cx = 53.02;
+  const cy = 162;
+  const r = 136.8;
+  const a0 = (-101.6 * Math.PI) / 180;
+  const span = (203.2 * Math.PI) / 180;
+  const pt = (a: number) => `${cx + r * Math.cos(a)} ${cy + r * Math.sin(a)}`;
+  const arc = (from: number, to: number) => `M${pt(from)} A${r} ${r} 0 ${to - from > Math.PI ? 1 : 0} 1 ${pt(to)}`;
+  const v = Math.max(0, Math.min(1, value));
   return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#fff" strokeWidth="22" fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#FFC72C" strokeWidth="22" fill="none" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, value))} />
+    <div className="pointer-events-none absolute left-0 top-1/2 h-[304px] w-[192px] -translate-y-1/2">
+      <svg viewBox="0 0 215.021 324" className="absolute left-[-5.45%] top-[-3.29%] h-[106.58%] w-[111.99%] overflow-visible" fill="none">
+        <defs>
+          <filter id="arcTrack" x="0" y="0" width="215.021" height="324" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#3EA5F4" floodOpacity="0.1" />
+          </filter>
+          <filter id="arcFill" filterUnits="userSpaceOnUse" x="0" y="0" width="215.021" height="324">
+            <feOffset in="SourceAlpha" dy="4" />
+            <feGaussianBlur stdDeviation="2" />
+            <feComposite in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" />
+            <feColorMatrix values="0 0 0 0 0.384 0 0 0 0 0.29 0 0 0 0 0 0 0 0 0.2 0" />
+            <feBlend in2="SourceGraphic" />
+          </filter>
+        </defs>
+        <path d={arc(a0, a0 + span)} stroke="white" strokeWidth={30.4} strokeLinecap="round" filter="url(#arcTrack)" />
+        {v > 0 && <path d={arc(a0, a0 + span * v)} stroke="#FFC72C" strokeWidth={30.4} strokeLinecap="round" filter="url(#arcFill)" />}
       </svg>
-      <div className="absolute text-center">{children}</div>
     </div>
   );
 }
@@ -37,74 +57,81 @@ export function Budget() {
   const contract = s.stages.reduce((a, st) => a + st.contractAmount, 0);
 
   return (
-    <TabScreen>
-      <Hero>
-        <div className="flex items-center gap-4">
-          <div className="flex-1 space-y-5">
-            <div>
-              <p className="font-display text-h3 font-bold">{contractor ? 'סכום חוזה קבלן' : 'תקציב מעודכן'}</p>
-              <p className="font-display text-h2 font-bold">{ils(contractor ? contract : t.total)}</p>
+    <TabScreen white>
+      <Hero variant="clouds">
+        {/* Figma: 403px block (416px row, centred) – totals on the right, the half ring with the paid sum on the left */}
+        <div className="h-[403px] px-6">
+          <div className="relative -mt-[6.5px] flex h-[416px] items-center justify-between lg:mx-auto lg:max-w-2xl lg:justify-between">
+            <BudgetArc value={t.paid / ((contractor ? contract : t.total) || 1)} />
+            <div className="relative flex flex-col items-start gap-8">
+              <div className="font-display text-h3 font-bold">
+                <p>{contractor ? 'סכום חוזה קבלן' : 'תקציב מעודכן'}</p>
+                <p>{ils(contractor ? contract : t.total)}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-body text-muted">נותר לתשלום</p>
+                <p className="text-lg font-semibold leading-5">{ils((contractor ? contract : t.total) - t.paid)}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-body text-muted">חריגות אושרו</p>
+                <p className="text-lg font-semibold leading-5">{ils(t.approvedEx)}</p>
+                <button onClick={() => nav('/app/exceptions')} className="flex items-start text-body leading-4 tracking-[0.042px] underline">
+                  הצג אישורי חריגות ותוספות
+                  {s.exceptions.some((e) => e.status === 'pending') && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-danger" />}
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="text-body text-muted">נותר לתשלום</p>
-              <p className="text-lg font-semibold">{ils((contractor ? contract : t.total) - t.paid)}</p>
-            </div>
-            <div>
-              <p className="text-body text-muted">חריגות אושרו</p>
-              <p className="text-lg font-semibold">{ils(t.approvedEx)}</p>
-              <button onClick={() => nav('/app/exceptions')} className="mt-1 flex items-center gap-1 text-caption underline">
-                {s.exceptions.some((e) => e.status === 'pending') && <span className="h-1.5 w-1.5 rounded-full bg-danger" />}
-                הצג אישורי חריגות ותוספות
-              </button>
+            <div className="relative flex flex-col items-center gap-1.5 text-center">
+              <div className="font-display font-bold">
+                <p className="text-xl1">{Math.round(t.paid / 1000)}</p>
+                <p className="text-h3">אלף ש״ח</p>
+              </div>
+              <p className="text-lg">שולמו עד כה</p>
             </div>
           </div>
-          <BigRing value={t.paid / (contractor ? contract : t.total)}>
-            <p className="font-display text-[44px] font-bold leading-none">{Math.round(t.paid / 1000)}</p>
-            <p className="text-lg font-semibold">אלף ש״ח</p>
-            <p className="text-body">שולמו עד כה</p>
-          </BigRing>
         </div>
-        {!contractor && (
-          <div className="mt-6 flex justify-center">
-            <Button variant="outline" onClick={() => nav('/app/expense/new')}>
-              הוספת הוצאה
-            </Button>
-          </div>
-        )}
       </Hero>
 
-      <div className="animate-fade-up -mt-8 space-y-4 px-6">
+      <div className="animate-fade-up relative -mt-6 flex flex-col items-center gap-6 px-6">
+        {!contractor && (
+          <Button variant="outline" onClick={() => nav('/app/expense/new')}>
+            הוספת הוצאה
+          </Button>
+        )}
+        <div className="w-full space-y-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
         {s.stages.map((st) => {
           const total = (contractor ? st.contractAmount : st.budget) + stageExceptions(s, st.id);
           return (
-            <button key={st.id} onClick={() => nav(`/app/budget/${st.id}`)} className="card-soft block w-full p-4 text-right shadow-blue">
-              <div className="mb-4 flex items-start gap-3">
-                <StageGlyph icon={st.icon} size={22} className="mt-1" />
+            /* Figma "budget level card" */
+            <button key={st.id} onClick={() => nav(`/app/budget/${st.id}`)} className="flex w-full flex-col items-center gap-4 rounded-lg bg-bg p-4 text-right">
+              <div className="flex w-full items-center gap-4">
+                <StageGlyph icon={st.icon} />
                 <div className="flex-1">
-                  <p className="text-body">{stageLabel(st.order)}</p>
+                  <p className="text-lg">{stageLabel(st.order)}</p>
                   <p className="font-display text-h3 font-bold">{st.name}</p>
                 </div>
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-white">
-                  <ArrowUpLeft size={18} className="text-primary" />
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white shadow-[0_0_5px_rgba(62,165,244,0.1)]">
+                  <Icon name="gettin" className="text-primary" />
                 </span>
               </div>
-              <div className="grid grid-cols-3 text-center text-body">
-                <div>
+              <div className="flex w-full gap-6 whitespace-nowrap text-center text-body">
+                <div className="flex flex-col gap-2">
                   <p className="text-muted">שולמו</p>
-                  <p className="font-semibold">{ils(st.paid)}</p>
+                  <p>{ils(st.paid)}</p>
                 </div>
-                <div>
+                <div className="flex flex-col gap-2">
                   <p className="text-muted">יתרה</p>
-                  <p className="font-semibold">{ils(total - st.paid)}</p>
+                  <p>{ils(total - st.paid)}</p>
                 </div>
-                <div>
+                <div className="flex flex-col gap-2">
                   <p className="text-muted">סה״כ</p>
-                  <p className="font-semibold">{ils(total)}</p>
+                  <p>{ils(total)}</p>
                 </div>
               </div>
             </button>
           );
         })}
+        </div>
       </div>
     </TabScreen>
   );
@@ -132,45 +159,43 @@ export function StageBudget() {
   const receipts = s.receipts.filter((x) => x.stageId === st.id);
 
   return (
-    <TabScreen>
+    <TabScreen white>
       <StageTabs items={stageTabs(s)} active={st.id} onSelect={(id) => nav(id === 'general' ? '/app/budget' : `/app/budget/${id}`)} />
-      <div key={st.id} className="animate-fade-up space-y-8 px-6 pt-4">
-        <section className="text-center">
-          <p className="text-body">סטטוס תקציב:</p>
-          <p className="font-display text-h1 font-bold text-primary">{ils(st.paid)}</p>
-          <p className="text-body">שולמו עד כה</p>
-          <div className="relative mt-6">
-            <Chip tone="yellow" className="absolute -top-6 left-0">
-              {Math.round((total - st.paid) / 1000)} אש״ח
-            </Chip>
-            <ProgressBar value={total ? (st.paid / total) * 100 : 0} color="bg-primary" className="bg-primary-50" />
+      <div key={st.id} className="animate-fade-up space-y-10 px-6 pt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10 lg:space-y-0">
+        <section className="flex flex-col items-center gap-6">
+          <div className="flex w-full flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-lg">סטטוס תקציב:</p>
+              <p className="font-display text-h1 font-bold tracking-[-0.28px] text-primary">{ils(st.paid)}</p>
+              <p className="text-body text-muted">שולמו עד כה</p>
+            </div>
+            <div className="flex w-full flex-col items-start">
+              <span className="flex h-4 items-center rounded-lg bg-accent px-2 text-caption text-white">{Math.round((total - st.paid) / 1000)} אש״ח</span>
+              <ProgressBar value={total ? (st.paid / total) * 100 : 0} color="bg-primary" className="bg-bg" />
+            </div>
+            <dl className="w-[278px] text-body">
+              <Line k="סה״כ מעודכן:" v={ils(total)} />
+              <Line k="יתרה לתשלום:" v={ils(total - st.paid)} />
+              <Line k="סך חריגות (אושרו):" v={ils(ex)} />
+              <Line k="סכום חוזה קבלן:" v={ils(st.contractAmount)} last />
+            </dl>
           </div>
-          <dl className="mt-4 divide-y divide-line text-body">
-            <Line k="סה״כ מעודכן:" v={ils(total)} />
-            <Line k="יתרה לתשלום:" v={ils(total - st.paid)} />
-            <Line k="סך חריגות (אושרו):" v={ils(ex)} />
-            <Line k="סכום חוזה קבלן:" v={ils(st.contractAmount)} />
-          </dl>
           {!contractor && (
-            <Button variant="outline" className="mt-4" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
+            <Button variant="outline" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
               עריכת שלב
             </Button>
           )}
         </section>
 
-        <section>
-          <SectionTitle
-            action={
-              <IconButton onClick={() => setAdding(true)} aria-label="הוספת פריט">
-                <Plus size={18} />
-              </IconButton>
-            }
-          >
-            רשימת קניות
-          </SectionTitle>
-          <div className="space-y-2">
+        <section className="flex flex-col gap-4">
+          <SectionHead title="רשימת קניות">
+            <SmallIconButton onClick={() => setAdding(true)} aria-label="הוספת פריט">
+              <Icon name="addThin" />
+            </SmallIconButton>
+          </SectionHead>
+          <div className="space-y-4">
             {shopping.map((it) => (
-              <div key={it.id} className={cn('flex items-center gap-3 rounded-lg px-4 py-3', it.done ? 'bg-line' : 'bg-white shadow-blue')}>
+              <div key={it.id} className={cn('flex items-center rounded-lg px-4 py-2', it.done ? 'gap-4 bg-line' : 'gap-2 bg-bg')}>
                 <Checkbox checked={it.done} onChange={() => toggleShopping(it.id)} />
                 {editing === it.id ? (
                   <input
@@ -192,15 +217,17 @@ export function StageBudget() {
                     <img src={it.photo} alt="" className="h-7 w-7 rounded object-cover" />
                   </button>
                 )}
-                <button onClick={() => pickImages({ capture: true }).then(([p]) => p && updateShopping(it.id, { photo: p }))} aria-label="צילום פריט">
-                  <Camera size={16} className="text-muted" />
-                </button>
-                <button onClick={() => setEditing(it.id)} aria-label="עריכת פריט">
-                  <Pencil size={16} className="text-muted" />
-                </button>
-                <button onClick={() => removeShopping(it.id)} aria-label="מחיקה">
-                  <Trash2 size={16} className="text-muted" />
-                </button>
+                <span className="flex items-start gap-2">
+                  <button className="grid h-6 w-6 place-items-center" onClick={() => pickImages({ capture: true }).then(([p]) => p && updateShopping(it.id, { photo: p }))} aria-label="צילום פריט">
+                    <Icon name="camera" size={16} />
+                  </button>
+                  <button className="grid h-6 w-6 place-items-center" onClick={() => setEditing(it.id)} aria-label="עריכת פריט">
+                    <Icon name="sEdit" />
+                  </button>
+                  <button className="grid h-6 w-6 place-items-center" onClick={() => removeShopping(it.id)} aria-label="מחיקה">
+                    <Icon name="delete" size={16} />
+                  </button>
+                </span>
               </div>
             ))}
             {adding && (
@@ -220,12 +247,12 @@ export function StageBudget() {
           </div>
         </section>
 
-        <section>
-          <SectionTitle>חריגות לאישור</SectionTitle>
+        <section className="flex flex-col gap-2">
+          <SectionHead title="חריגות לאישור" />
           {exceptions.length ? (
-            <div className="no-scrollbar -mx-6 flex gap-3 overflow-x-auto px-6 pb-2">
+            <div className="no-scrollbar -mx-6 flex gap-4 overflow-x-auto px-6 pb-2 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0">
               {exceptions.map((e) => (
-                <div key={e.id} className="w-[300px] shrink-0">
+                <div key={e.id} className="w-[312px] shrink-0 lg:w-full">
                   <ExceptionCard e={e} />
                 </div>
               ))}
@@ -236,25 +263,24 @@ export function StageBudget() {
         </section>
 
         {!contractor && (
-          <section>
-            <SectionTitle
-              action={
-                <IconButton onClick={() => nav(`/app/receipt/new?stage=${st.id}`)} aria-label="הוספת אסמכתא">
-                  <Plus size={18} />
-                </IconButton>
-              }
-            >
-              פירוט הוצאות
-            </SectionTitle>
-            <div className="space-y-3">
+          <section className="flex flex-col gap-4">
+            <SectionHead title="פירוט הוצאות">
+              <SmallIconButton onClick={() => nav(`/app/receipt/new?stage=${st.id}`)} aria-label="הוספת אסמכתא">
+                <Icon name="addThin" />
+              </SmallIconButton>
+            </SectionHead>
+            <div className="space-y-2">
               {receipts.map((r) => (
-                <button key={r.id} onClick={() => nav(`/app/receipts/${r.id}`)} className="card-soft flex w-full items-center gap-3 p-4 text-right">
-                  <img src={r.preview ?? '/img/doc.png'} alt="" className="h-10 w-8 rounded object-cover" />
-                  <div className="flex-1">
-                    <p className="text-body">{r.title}</p>
-                    <p className="font-semibold">{ils(r.amount)}</p>
+                /* Figma "פירוט הוצאות - כרטיס" */
+                <button key={r.id} onClick={() => nav(`/app/receipts/${r.id}`)} className="flex w-full items-center gap-2 overflow-hidden rounded-lg bg-bg p-4 text-right">
+                  <img src={r.preview ?? '/img/doc.png'} alt="" className="h-8 w-8 shrink-0 rounded-[5.333px] object-cover" />
+                  <div className="flex flex-col gap-1.5 whitespace-nowrap text-body">
+                    <p className="max-w-[180px] truncate">{r.title}</p>
+                    <p className="text-btn font-medium tracking-[0.042px]">{ils(r.amount)}</p>
                   </div>
-                  <Chip>{fmtDate(r.date)}</Chip>
+                  <div className="flex flex-1 self-stretch">
+                    <span className="mr-auto flex h-4 items-center rounded-lg bg-primary-100 px-2 text-caption">{fmtDate(r.date, true)}</span>
+                  </div>
                 </button>
               ))}
               {!receipts.length && <p className="text-body text-muted">אין הוצאות עדיין</p>}
@@ -267,18 +293,23 @@ export function StageBudget() {
   );
 }
 
-function Line({ k, v }: { k: string; v: string }) {
+/** label on the right, amount on the left, 1.5px light-blue divider between rows (Figma "divider") */
+function Line({ k, v, last }: { k: string; v: string; last?: boolean }) {
   return (
-    <div className="flex justify-between px-8 py-2">
-      <dt>{k}</dt>
-      <dd>{v}</dd>
-    </div>
+    <>
+      <div className="flex gap-2">
+        <dt className="whitespace-nowrap">{k}</dt>
+        <dd className="flex-1 text-left">{v}</dd>
+      </div>
+      {!last && <div className="flex h-2 items-start pt-[2.5px]"><span className="h-[1.5px] w-full rounded-full bg-primary-100" /></div>}
+    </>
   );
 }
 
 /* ---------- Exception card + details popup ---------- */
 
-export function ExceptionCard({ e }: { e: ExceptionReq }) {
+/** `white`: on the exceptions screen (light page) a pending card is white; in the stage budget it is light blue-gray */
+export function ExceptionCard({ e, white }: { e: ExceptionReq; white?: boolean }) {
   const { s, setExceptionStatus } = useStore();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -288,36 +319,42 @@ export function ExceptionCard({ e }: { e: ExceptionReq }) {
   const client = s.user.role === 'client';
   return (
     <>
-      <article className={cn('rounded-lg p-4', e.status === 'pending' ? 'border border-accent bg-white shadow-blue' : 'bg-[#F0F1F3] text-muted')}>
-        <div className="flex items-start gap-3">
-          <Avatar src={e.avatar} name={e.author} />
-          <div className="flex-1">
-            <p className="text-body font-medium">{e.author}</p>
-            <p className="text-caption text-muted">
-              {e.authorTitle} · {e.time}
-            </p>
+      {/* Figma "Exception card" (pending): yellow outline, avatar + byline + stage chip, title, amount, approve / view */}
+      <article className={cn('flex flex-col gap-4 rounded-lg p-4', e.status === 'pending' ? cn('border border-accent', white ? 'bg-white' : 'bg-bg') : 'bg-[#F0F1F3] text-muted')}>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Avatar src={e.avatar} name={e.author} size={24} />
+            <div className="flex flex-1 flex-col items-start gap-2">
+              <p className="text-btn font-medium tracking-[0.042px]">{e.author}</p>
+              <p className="flex items-center gap-1 text-caption text-muted">
+                {e.authorTitle} <span className="h-0.5 w-0.5 rounded-full bg-muted" /> {e.time}
+              </p>
+            </div>
+            {stage && <span className="flex h-4 items-center self-start rounded-lg bg-primary-100 px-2 text-caption text-ink">{stage.name.split(' ')[0]}</span>}
           </div>
-          {stage && <Chip>{stage.name.split(' ')[0]}</Chip>}
+          <div>
+            <p className="text-body">{e.title}</p>
+            <p className="text-lg font-semibold leading-5">{ils(e.amount)}</p>
+          </div>
         </div>
-        <p className="mt-3 text-body">{e.title}</p>
-        <p className="font-display text-h3 font-bold">{ils(e.amount)}</p>
-        <div className={cn('mt-3 flex gap-3', e.status === 'pending' ? 'justify-center' : 'justify-start')}>
+        {/* client + pending: approve / view; otherwise a status line on the left (Figma: "ממתין לאישור", "חריגה אושרה") */}
+        <div className={cn('flex gap-6', e.status === 'pending' && client ? 'justify-center' : 'justify-end')}>
           {e.status === 'pending' ? (
             client ? (
-              <Button size="sm" className="min-w-[100px]" onClick={() => setConfirm(true)}>
+              <Button size="sm" onClick={() => setConfirm(true)}>
                 אישור
               </Button>
             ) : (
-              <span className="flex items-center gap-1 text-caption text-warn">
-                <Clock3 size={16} /> ממתין לאישור
-              </span>
+              <button onClick={() => setOpen(true)} className="text-btn font-medium tracking-[0.042px] text-ink">
+                ממתין לאישור
+              </button>
             )
           ) : (
-            <button onClick={() => setOpen(true)} className={cn('flex items-center gap-1 text-body font-medium', e.status === 'approved' ? 'text-ink' : 'text-danger')}>
-              <CheckCircle2 size={16} /> {e.status === 'approved' ? 'חריגה אושרה' : 'חריגה נדחתה'}
+            <button onClick={() => setOpen(true)} className={cn('text-btn font-medium tracking-[0.042px]', e.status === 'approved' ? 'text-ink' : 'text-danger')}>
+              {e.status === 'approved' ? 'חריגה אושרה' : 'חריגה נדחתה'}
             </button>
           )}
-          {e.status === 'pending' && (
+          {e.status === 'pending' && client && (
             <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
               צפה בחריגה
             </Button>
@@ -394,12 +431,13 @@ export function ExceptionsScreen() {
   const pending = s.exceptions.filter((e) => e.status === 'pending').length;
   return (
     <>
-      <AppBar title="" />
-      <main className="animate-fade-up space-y-5 px-6 pb-10 pt-6">
-        <div className="flex items-center justify-between">
-          <h1 className="font-display text-h1 font-bold">אישורי חריגה</h1>
+      <AppBar menuOnly />
+      {/* Figma: 16px gaps (client) / 24px with the send button (contractor) */}
+      <main className={cn('animate-fade-up desk flex flex-col px-6 pb-10 pt-4', contractor ? 'gap-6' : 'gap-4')}>
+        <div className={cn('flex items-center justify-between', contractor ? 'pb-2 pt-4' : 'py-4')}>
+          <h1 className="font-display text-h1 font-bold tracking-[-0.28px]">אישורי חריגה</h1>
           {pending > 0 && (
-            <span className="rounded bg-warn px-2 py-1 text-caption font-medium text-white">
+            <span className="flex h-6 items-center rounded bg-warn px-2 text-caption font-medium text-[#FEFAF5]">
               {pending} {pending === 1 ? 'ממתין' : 'ממתינים'} {contractor ? 'לאישור' : 'לאישורך'}
             </span>
           )}
@@ -409,11 +447,11 @@ export function ExceptionsScreen() {
             <Button onClick={() => nav('/app/exceptions/new')}>שליחת אישור חדש</Button>
           </div>
         )}
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
           {[...s.exceptions]
             .sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending'))
             .map((e) => (
-              <ExceptionCard key={e.id} e={e} />
+              <ExceptionCard key={e.id} e={e} white />
             ))}
         </div>
       </main>
@@ -435,7 +473,7 @@ export function ExceptionForm() {
   return (
     <SubScreen title="אישור חריגה" sheet>
       <Heading title="אישור חריגה" sub="פרט את הבקשה לאישור הלקוח" />
-      <div className="space-y-5 px-6">
+      <div className="space-y-6 px-6">
         <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />
         <Field label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="תאר בקצרה למה האישור..." />
         <TextArea label="תיאור החריגה" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="מה קרה? מה לא חישבנו מראש? כתוצאה ממי זה נגרם?..." />
@@ -472,24 +510,27 @@ export function ReceiptForm() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [file, setFile] = useState<{ name: string; preview?: string }>();
   return (
-    <SubScreen title="הוספת חשבונית" sheet>
-      <Heading title="הוספת חשבונית/קבלה" />
-      <div className="space-y-5 px-6">
+    <SubScreen title="פירוט הוצאות" sheet>
+      <Heading title="פירוט הוצאות" sub="הוספת חשבונית/קבלה" />
+      {/* Figma "הוספת אסמכתא הוצאה": big upload area, title, then date | amount side by side (placeholders only), small centred save */}
+      <div className="space-y-4 px-6">
         {!q.get('stage') && <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />}
         <UploadSlot
-          className="aspect-[3/2]"
+          className="aspect-[342/324]"
           filled={file ? (file.preview ?? '/img/doc.png') : undefined}
           label={file?.name ?? 'העלאת קובץ / צילום'}
           onAdd={() => pickDocument().then((f) => f && setFile(f))}
           onRemove={() => setFile(undefined)}
         />
-        <Field label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="לדוגמה: חשבונית פינוי פסולת" />
-        <Field label="סכום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="₪" />
-        <Field label="תאריך" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Field aria-label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="כותרת" />
+        <div className="flex gap-4">
+          <Field aria-label="תאריך" className="flex-1" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="סכום" />
+        </div>
       </div>
-      <BottomActions>
+      <BottomActions inline>
         <Button
-          block
+          className="mx-auto"
           disabled={!stage || !title || !amount}
           onClick={() => {
             addReceipt({ stageId: stage!, title, amount: +amount, date, preview: file?.preview });

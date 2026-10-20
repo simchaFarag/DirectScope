@@ -268,7 +268,10 @@ export function useTotals() {
     const allTasks = s.stages.flatMap((st) => st.tasks);
     const progress = allTasks.length ? Math.round((allTasks.filter((t) => t.status === 'done').length / allTasks.length) * 100) : 0;
     const daysLeft = Math.max(0, Math.ceil((new Date(s.project.endDate).getTime() - Date.now()) / 86400000));
-    return { approvedEx, extras, base, total, paid, remaining: total - paid, progress, daysLeft };
+    // "ימי עסקים" on the schedule dates card: Sunday–Thursday
+    let workDaysLeft = 0;
+    for (let i = 1; i <= daysLeft; i++) if (new Date(Date.now() + i * 86400000).getDay() < 5) workDaysLeft++;
+    return { approvedEx, extras, base, total, paid, remaining: total - paid, progress, daysLeft, workDaysLeft };
   }, [s]);
 }
 

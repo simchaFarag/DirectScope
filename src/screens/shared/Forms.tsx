@@ -1,13 +1,14 @@
-import { BookUser, Copy, ImagePlus, Pencil, Plus, X } from 'lucide-react';
-import { useState } from 'react';
+import { X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Heading, SubScreen } from '@/components/layout';
+import { AppBar, Heading, SubScreen } from '@/components/layout';
+import { Icon, type IconName } from '@/components/FigmaIcon';
 import { useToast } from '@/components/toast';
-import { Avatar, BottomActions, Button, Field, Pills, PhotoSourceButtons, Select, TextArea, UploadSlot } from '@/components/ui';
+import { Avatar, BottomActions, Button, ClearField, Field, Modal, Select, TextArea, UploadSlot } from '@/components/ui';
 import { useStore } from '@/data/store';
 import type { ExpenseKind, MemberRole, Permission } from '@/data/types';
 import { pickImages } from '@/lib/files';
-import { cn, fmtDate, stageLabel } from '@/lib/format';
+import { cn, fmtDate, ils, stageLabel } from '@/lib/format';
 
 const inSetup = (path: string) => path.startsWith('/setup');
 
@@ -34,20 +35,31 @@ export function ExpenseForm() {
 
   return (
     <SubScreen title="הוספת הוצאה" sheet>
-      <Heading title="הוצאות נוספות" sub="תשלומים מחוץ לחוזה הקבלן" />
-      <div className="space-y-5 px-6">
-        <div>
-          <p className="mb-2 text-body font-medium">מהות התשלום</p>
-          <Pills options={kinds} value={kind} onChange={setKind} />
-        </div>
-        {kind === 'other' && <Field label="פרט את ההוצאה" value={other} onChange={(e) => setOther(e.target.value)} placeholder="לדוגמה: ביטוח, אגרה עירונית..." />}
-        <Field label="סכום לתשלום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="₪" />
-        <Field label="מספר משימות לביצוע (לא חובה)" inputMode="numeric" value={tasks} onChange={(e) => setTasks(e.target.value.replace(/\D/g, ''))} />
-        <Field label="זמן עבודה (לא חובה)" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="לדוגמה: שבוע" />
+      {/* Figma "הוספת שלב – step 1-3": dropdown + three placeholder-only fields, 24px apart */}
+      <Heading title="הוספה" sub="הוצאות נוספות" />
+      <div className="space-y-6 px-6">
+        <Select
+          placeholder="מהות התשלום"
+          options={kinds}
+          value={kind}
+          onChange={setKind}
+          detail={{
+            value: 'other',
+            node: (
+              <label className="block">
+                <span className="mb-0.5 block px-2 text-caption text-muted">פרט את ההוצאה</span>
+                <input value={other} onChange={(e) => setOther(e.target.value)} placeholder="לדוגמה: ביטוח, אגרה עירונית..." className="h-10 w-full rounded-lg border border-primary bg-white px-2 text-body placeholder:text-muted focus:outline-none" />
+              </label>
+            ),
+          }}
+        />
+        <Field aria-label="סכום לתשלום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="סכום לתשלום" />
+        <Field aria-label="מספר משימות לביצוע" inputMode="numeric" value={tasks} onChange={(e) => setTasks(e.target.value.replace(/\D/g, ''))} placeholder="מספר משימות לביצוע (לא חובה)" />
+        <Field aria-label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="זמן עבודה (לא חובה)" />
       </div>
       <BottomActions>
         <Button
-          block
+          className="mx-auto w-[314px] max-w-full"
           disabled={!title || !amount}
           onClick={() => {
             addExtra({ kind: kind!, title: title!, amount: +amount, tasks: tasks ? +tasks : undefined, duration: duration || undefined });
@@ -77,52 +89,82 @@ export function StageEdit() {
   const [start, setStart] = useState(st?.startDate ?? '');
   const [end, setEnd] = useState(st?.endDate ?? '');
   const [duration, setDuration] = useState(st?.duration ?? '');
+  const [datesOpen, setDatesOpen] = useState(false);
   if (!st) return null;
+  const setup = inSetup(pathname);
+  const contractor = s.user.role === 'contractor';
   const badDates = !!start && !!end && end < start;
+  const slash = (iso: string) => (iso ? fmtDate(iso).replace(/\./g, '/') : '');
 
-  return (
-    <SubScreen title="עריכת שלב" sheet>
-      <Heading title="עריכה" sub={`${stageLabel(st.order)} ${st.name}`} />
-      <div className="space-y-5 px-6">
-        <TextArea label="שם השלב" value={name} onChange={(e) => setName(e.target.value)} max={300} />
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="תקציב" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value.replace(/\D/g, ''))} />
-          <Field label="סכום חוזה קבלן" inputMode="numeric" value={contract} onChange={(e) => setContract(e.target.value.replace(/\D/g, ''))} />
-        </div>
-        {!inSetup(pathname) && (
-          <button onClick={() => nav(`/app/schedule/${st.id}/tasks`)} className="flex w-full items-center justify-between rounded-lg border border-primary-100 bg-white px-4 py-3">
-            <span className="text-body">משימות</span>
-            <span className="flex items-center gap-1 text-body font-semibold text-primary">
-              {st.tasks.length} <Pencil size={14} />
-            </span>
-          </button>
-        )}
-        <Field label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} />
-        <div>
-          <p className="mb-1 text-caption text-muted">תאריכים</p>
-          <div className="grid grid-cols-2 gap-3">
-            <input type="date" className="field" value={start} onChange={(e) => setStart(e.target.value)} aria-label="תאריך התחלה" />
-            <input type="date" className="field" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="תאריך סיום" />
-          </div>
-          <p className={cn('mt-1 text-caption', badDates ? 'text-danger' : 'text-muted')} dir={badDates ? undefined : 'ltr'}>
-            {badDates ? 'תאריך הסיום לפני תאריך ההתחלה' : `${start && fmtDate(start)} - ${end && fmtDate(end)}`}
-          </p>
-        </div>
+  const body = (
+    /* Figma "עריכת שלב": white page, H3 heading, then name / budget / tasks / dates 24px apart and the save button */
+    <div className="flex flex-col gap-6 px-6 pb-4">
+      <div className="flex flex-col items-center py-4 text-center">
+        <h1 className="font-display text-h3 font-bold">עריכה</h1>
+        <p className="text-body">
+          {stageLabel(st.order)} {st.name}
+        </p>
       </div>
-      <BottomActions>
-        <Button
-          block
-          disabled={!name || badDates}
-          onClick={() => {
-            updateStage(st.id, { name, budget: +budget || 0, contractAmount: +contract || 0, startDate: start, endDate: end, duration });
-            toast('השלב עודכן');
-            nav(-1);
-          }}
-        >
-          שמירה
-        </Button>
-      </BottomActions>
-    </SubScreen>
+      <TextArea label="שם השלב" value={name} onChange={(e) => setName(e.target.value)} max={300} />
+      {/* the contractor edits the contract sum, everyone else the stage budget */}
+      {contractor ? (
+        <Field label="תקציב" inputMode="numeric" value={contract && ils(+contract)} onChange={(e) => setContract(e.target.value.replace(/\D/g, ''))} />
+      ) : (
+        <Field label="תקציב" inputMode="numeric" value={budget && ils(+budget)} onChange={(e) => setBudget(e.target.value.replace(/\D/g, ''))} />
+      )}
+      {setup ? (
+        <Field label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} />
+      ) : (
+        <label className="block">
+          <span className="mb-0.5 block px-2 text-caption text-ink">משימות</span>
+          <button onClick={() => nav(`/app/schedule/${st.id}/tasks`)} className="field text-right text-muted">
+            {st.tasks.length}
+          </button>
+        </label>
+      )}
+      <div className="flex items-end gap-4">
+        <button onClick={() => setDatesOpen(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white shadow-[0_0_5px_rgba(62,165,244,0.1)]" aria-label="בחירת תאריכים">
+          <Icon name="date" className="text-primary" />
+        </button>
+        <label className="block flex-1">
+          <span className="mb-0.5 block px-2 text-caption text-ink">תאריכים</span>
+          <button onClick={() => setDatesOpen(true)} className={cn('field text-right', badDates ? 'text-danger' : 'text-muted')} dir="ltr">
+            {start || end ? `${slash(start)} - ${slash(end)}` : 'בחירת תאריכים'}
+          </button>
+        </label>
+      </div>
+      {badDates && <p className="-mt-4 px-2 text-caption text-danger">תאריך הסיום לפני תאריך ההתחלה</p>}
+      <Button
+        className="w-[314px] max-w-full self-end"
+        disabled={!name || badDates}
+        onClick={() => {
+          updateStage(st.id, { name, budget: +budget || 0, contractAmount: +contract || 0, startDate: start, endDate: end, duration });
+          toast('השלב עודכן');
+          nav(-1);
+        }}
+      >
+        שמירה
+      </Button>
+      <Modal open={datesOpen} onClose={() => setDatesOpen(false)} title="תאריכים">
+        <div className="space-y-4">
+          <Field label="תאריך התחלה" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+          <Field label="תאריך סיום" type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
+          <Button block onClick={() => setDatesOpen(false)}>
+            אישור
+          </Button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // In the setup flow there is no app bar – keep the back header there
+  return setup ? (
+    <SubScreen title="עריכת שלב">{body}</SubScreen>
+  ) : (
+    <>
+      <AppBar />
+      <main className="animate-fade-up desk flex-1 bg-white pt-6">{body}</main>
+    </>
   );
 }
 
@@ -138,7 +180,7 @@ export function StageNew() {
   return (
     <SubScreen title="הוספת שלב" sheet>
       <Heading title="הוספת שלב" sub="שלב חדש יתווסף בסוף לוח הזמנים" />
-      <div className="space-y-5 px-6">
+      <div className="space-y-5 px-6 short:space-y-3">
         <Field label="שם השלב" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: צבע וגמר" />
         <Field label="תקציב" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value.replace(/\D/g, ''))} placeholder="₪" />
         <Field label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="לדוגמה: שבוע" />
@@ -171,9 +213,10 @@ export function InspirationBoard() {
   const empty = Math.max(2, 6 - withImg.length);
   const upload = setup ? '/setup/inspiration/upload' : '/app/inspiration/upload';
   return (
-    <SubScreen title="הקמת פרויקט">
+    <SubScreen title="לוח השראה" sheet>
       <Heading title="לוח השראה" sub="אופציונאלי - לא חובה" />
-      <div className="grid grid-cols-2 gap-4 px-6">
+      {/* Figma "iPhone 1 / 11": 162×136 squares, 8px apart, a small centred button */}
+      <div className="grid grid-cols-2 gap-2 px-6">
         {withImg.map((it) => (
           <div key={it.id} className="relative">
             <UploadSlot filled={it.image} onAdd={() => {}} />
@@ -185,7 +228,7 @@ export function InspirationBoard() {
         ))}
       </div>
       <BottomActions>
-        <Button block variant={withImg.length ? 'primary' : 'outline'} onClick={() => (setup ? nav('/setup/share') : nav(-1))}>
+        <Button className="mx-auto" variant={withImg.length ? 'primary' : 'outline'} onClick={() => (setup ? nav('/setup/share') : nav(-1))}>
           {withImg.length ? 'שמירה' : 'לא כרגע'}
         </Button>
       </BottomActions>
@@ -193,7 +236,6 @@ export function InspirationBoard() {
   );
 }
 
-const inspoCategories = ['חדר אמבט', 'סלון', 'מטבח', 'חלונות', 'תאורה', 'ריצוף', 'צבע', 'חזית'].map((c) => ({ value: c, label: c }));
 
 /** העלאת תמונה ללוח השראה – gallery / camera + title / category (designer note) */
 export function InspirationUpload() {
@@ -206,18 +248,14 @@ export function InspirationUpload() {
   return (
     <SubScreen title="העלאת תמונה" sheet>
       <Heading title="לוח השראה" sub="העלאת תמונה" />
-      <div className="space-y-5 px-6">
-        <UploadSlot className="aspect-[4/3]" filled={img} onAdd={() => pickImages().then(([i]) => i && setImg(i))} onRemove={() => setImg(undefined)} label="העלאת תמונה" />
-        <PhotoSourceButtons onPick={([i]) => setImg(i)} />
-        <div>
-          <p className="mb-2 text-caption text-muted">נושא</p>
-          <Pills options={inspoCategories} value={title} onChange={setTitle} />
-        </div>
-        <Field label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="או כתוב כותרת משלך" />
+      {/* Figma "העלאת תמונה ללוח השראה": image, title field, small centred save. The title is the board category (prefilled from ?cat=). */}
+      <div className="space-y-4 px-6">
+        <UploadSlot className="aspect-[342/325]" filled={img} onAdd={() => pickImages().then(([i]) => i && setImg(i))} onRemove={() => setImg(undefined)} label="העלאת תמונה" />
+        <Field aria-label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="כותרת" />
       </div>
-      <BottomActions>
+      <BottomActions inline>
         <Button
-          block
+          className="mx-auto"
           disabled={!img || !title}
           onClick={() => {
             addInspiration(title, img);
@@ -251,40 +289,44 @@ export function ShareList() {
   return (
     <SubScreen title="שיתוף" sheet onBack={setup ? () => nav(-1) : undefined}>
       <Heading title="שיתוף" sub="להזמין בני זוג או אנשי מקצוע כדי שכולם יהיו מסונכרנים על התקציב, המסמכים והתקדמות השיפוץ בזמן אמת" />
-      <div className="px-6">
-        <div className="flex items-center gap-3 border-b border-primary-100 pb-4">
+      {/* Figma "iPhone 12 / 14": you, a divider, member rows (chip + edit / remove) and "הוספת חדש", 24px apart */}
+      <div className="flex flex-col gap-6 px-6">
+        <div className="flex items-center gap-4">
           <Avatar src={s.user.avatar ?? '/avatars/a6.png'} name={s.user.firstName} />
           <span className="text-body">אתה</span>
         </div>
-        <ul className="divide-y divide-primary-50">
-          {s.members.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 py-4">
-              <Avatar src={m.avatar} name={m.name} />
-              <div className="flex-1">
-                <p className="text-body">{m.name}</p>
-                <p className="text-body text-muted" dir="ltr" style={{ textAlign: 'right' }}>
-                  {m.phone}
-                </p>
+        <div className="flex h-2 items-center">
+          <span className="h-[1.5px] w-full rounded-full bg-primary-100" />
+        </div>
+        {s.members.map((m) => (
+          <div key={m.id} className="flex items-center gap-4">
+            <Avatar src={m.avatar} name={m.name} />
+            <div className="flex items-center gap-6">
+              <div className="whitespace-nowrap text-body">
+                <p>{m.name}</p>
+                <p className="text-muted">{m.phone}</p>
               </div>
-              <span className={cn('rounded-full px-2 text-caption', m.permission === 'edit' ? 'bg-success-soft text-success-dark' : 'bg-primary-100')}>{m.permission === 'edit' ? 'עריכה' : 'צפייה'}</span>
-              <button onClick={() => nav(`${base}/${m.id}`)} className="grid h-7 w-7 place-items-center rounded-full bg-bg" aria-label="עריכה">
-                <Pencil size={14} />
+              <span className={cn('flex h-4 items-center rounded-lg px-2 text-caption', m.permission === 'edit' ? 'bg-success-soft text-success-dark' : 'bg-primary-100')}>{m.permission === 'edit' ? 'עריכה' : 'צפייה'}</span>
+            </div>
+            <div className="flex flex-1 items-center justify-end gap-2 px-2">
+              <button onClick={() => nav(`${base}/${m.id}`)} className="grid h-6 w-6 place-items-center rounded-full bg-white shadow-[0_0_5px_rgba(62,165,244,0.1)]" aria-label={`עריכת ${m.name}`}>
+                <Icon name="sEdit" />
               </button>
-              <button onClick={() => removeMember(m.id)} className="grid h-7 w-7 place-items-center rounded-full bg-bg" aria-label="הסרה">
-                <X size={14} />
+              <button onClick={() => removeMember(m.id)} className="grid h-6 w-6 place-items-center rounded-full bg-white shadow-[0_0_5px_rgba(62,165,244,0.1)]" aria-label={`הסרת ${m.name}`}>
+                <X size={12} strokeWidth={1.2} />
               </button>
-            </li>
-          ))}
-        </ul>
-        <button onClick={() => nav(`${base}/new`)} className="flex items-center gap-3 py-4 text-body font-medium">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-100 text-primary">
-            <Plus size={20} />
+            </div>
+          </div>
+        ))}
+        <button onClick={() => nav(`${base}/new`)} className="flex items-center gap-4 text-body font-medium leading-4 tracking-[0.042px]">
+          <span className="grid h-10 w-10 place-items-center rounded-full border border-primary-100 bg-primary-100 text-primary shadow-[0_0_5px_rgba(62,165,244,0.1)]">
+            <Icon name="add" />
           </span>
           הוספת חדש
         </button>
       </div>
       <BottomActions>
-        <Button block variant={s.members.length || !setup ? 'primary' : 'outline'} onClick={done}>
+        <Button className="mx-auto w-[314px] max-w-full" variant={s.members.length || !setup ? 'primary' : 'outline'} onClick={done}>
           {s.members.length || !setup ? 'שמירת שינויים' : 'לא כרגע'}
         </Button>
       </BottomActions>
@@ -292,27 +334,35 @@ export function ShareList() {
   );
 }
 
-const memberRoles: { value: MemberRole; label: string; tone: string }[] = [
-  { value: 'renovator', label: 'משפץ', tone: 'text-primary' },
-  { value: 'family', label: 'משפחה', tone: 'text-accent' },
-  { value: 'professional', label: 'בעל מקצוע', tone: 'text-accent-dark' },
+const memberRoles: { value: MemberRole; label: string; icon: IconName }[] = [
+  { value: 'renovator', label: 'משפץ', icon: 'roleClient' },
+  { value: 'family', label: 'משפחה', icon: 'roleClientF' },
+  { value: 'professional', label: 'בעל מקצוע', icon: 'roleContractor' },
 ];
 
-export function RoleChoice<T extends string>({ options, value, onChange }: { options: { value: T; label: string; tone: string }[]; value?: T; onChange: (v: T) => void }) {
+/** Figma: 56px white buttons with the 32px role icons, 12px label under each, 24px apart */
+export function RoleChoice<T extends string>({ options, value, onChange }: { options: { value: T; label: string; icon: IconName }[]; value?: T; onChange: (v: T) => void }) {
   return (
     <div className="flex justify-center gap-6">
       {options.map((r) => (
-        <button key={r.value} type="button" onClick={() => onChange(r.value)} className="flex flex-col items-center gap-2">
-          <span className={cn('grid h-14 w-14 place-items-center rounded-full bg-white shadow-blue ring-2 transition', value === r.value ? 'ring-primary' : 'ring-transparent')}>
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className={r.tone}>
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 22c0-4 3.6-7 8-7s8 3 8 7" />
-            </svg>
+        <button key={r.value} type="button" onClick={() => onChange(r.value)} className="flex flex-col items-center">
+          <span className={cn('grid h-14 w-14 place-items-center rounded-full shadow-[0_0_5px_rgba(62,165,244,0.1)] transition', value === r.value ? 'bg-primary-200' : 'bg-white')}>
+            <Icon name={r.icon} />
           </span>
           <span className={cn('text-caption', value === r.value ? 'font-medium text-primary' : 'text-ink')}>{r.label}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+/** Figma link row: 14px underlined text next to a 24px primary-50 circle with a 16px icon */
+function IconLink({ icon, children, onClick }: { icon: IconName | ReactNode; children: ReactNode; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex items-center gap-2 text-body leading-4 tracking-[0.042px] underline">
+      <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-50 text-primary">{typeof icon === 'string' ? <Icon name={icon as IconName} /> : icon}</span>
+      {children}
+    </button>
   );
 }
 
@@ -355,45 +405,44 @@ export function MemberForm() {
   return (
     <SubScreen title={existing ? 'עריכה' : 'הוספה ושיתוף'} sheet>
       <Heading title={existing ? 'עריכה' : 'הוספה ושיתוף'} sub={existing ? 'שותפים קיימים, שינויים קלים' : 'שותפים שתוסיף יקבלו את פרטי ההזמנה בהודעת ווצאפ'} />
-      <div className="space-y-5 px-6">
-        {!existing && (
-          <button onClick={pickContact} className="flex items-center gap-2 text-body underline">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-primary-50 text-primary">
-              <BookUser size={16} />
-            </span>
-            חפש ברשימת אנשי הקשר שלך
-          </button>
-        )}
-        <div className="grid grid-cols-[1fr_auto] items-start gap-3">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם" className="field" />
-          <Select
-            className="w-32"
+      {/* Figma "iPhone 5 / 13 / 15": contacts link + name | permission + phone (16px apart), roles, photo link – groups 24px apart */}
+      <div className="space-y-6 px-6">
+        <div className="space-y-4">
+          {!existing && (
+            <IconLink icon="contact" onClick={pickContact}>
+              חפש ברשימת אנשי הקשר שלך
+            </IconLink>
+          )}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-8">
+            <ClearField value={name} onChange={setName} placeholder="שם" />
+            <Select
+              className="w-[116px]"
             placeholder="הרשאה"
             value={perm}
             onChange={setPerm}
-            options={[
-              { value: 'edit', label: 'עריכה' },
-              { value: 'view', label: 'צפייה' },
-            ]}
-          />
+              options={[
+                { value: 'edit', label: 'עריכה' },
+                { value: 'view', label: 'צפייה' },
+              ]}
+            />
+          </div>
+          <ClearField value={phone} onChange={setPhone} placeholder="מספר טלפון נייד" tel />
         </div>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="מספר טלפון נייד" className="field" />
-        <div>
-          <p className="mb-3 text-body">בחר את התפקיד המתאים:</p>
+        <div className="space-y-2">
+          <p className="text-body">בחר את התפקיד המתאים:</p>
           <RoleChoice options={memberRoles} value={role} onChange={setRole} />
         </div>
-        <button onClick={() => pickImages().then(([i]) => i && setAvatar(i))} className="flex items-center gap-2 text-body underline">
-          {avatar ? <Avatar src={avatar} size={28} /> : <ImagePlus size={18} />}
+        <IconLink icon={avatar ? <img src={avatar} alt="" className="h-full w-full object-cover" /> : 'jpeg'} onClick={() => pickImages().then(([i]) => i && setAvatar(i))}>
           {avatar ? 'החלפת תמונה' : 'הוסף תמונת פרופיל (לא חובה)'}
-        </button>
+        </IconLink>
       </div>
       <BottomActions>
-        <Button className="flex-[3]" disabled={!valid} onClick={save}>
+        <Button className="flex-1" disabled={!valid} onClick={save}>
           {existing ? 'שמירת שינויים' : 'שמירה ושליחה'}
         </Button>
         <Button
           variant="outline"
-          className="flex-[2]"
+          className="shrink-0 px-8"
           onClick={() => {
             navigator.clipboard?.writeText(inviteLink).then(
               () => toast('הקישור הועתק'),
@@ -401,7 +450,7 @@ export function MemberForm() {
             );
           }}
         >
-          <Copy size={16} /> העתק קישור
+          העתק קישור
         </Button>
       </BottomActions>
     </SubScreen>

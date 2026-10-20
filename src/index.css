@@ -9,8 +9,19 @@
     height: 100%;
   }
   body {
-    @apply bg-[#e9eef5] font-sans text-ink antialiased;
+    @apply bg-[#e9eef5] font-sans text-ink antialiased lg:bg-bg;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* Mobile: no visible scrollbar (the page still scrolls by swipe / wheel); desktop keeps the normal one */
+  @media (max-width: 1023px) {
+    html,
+    body {
+      scrollbar-width: none;
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      display: none;
+    }
   }
   input,
   textarea,
@@ -22,9 +33,16 @@
 }
 
 @layer components {
-  /* Phone-width column; on desktop it is shown centered like a device */
+  /* Phone-width column; on tablets it is shown centered like a device. On desktop the app screens widen (see AppLayout). */
   .phone {
-    @apply relative mx-auto flex min-h-full w-full max-w-phone flex-col bg-bg md:my-6 md:min-h-[844px] md:overflow-hidden md:rounded-[32px] md:shadow-bar;
+    @apply relative mx-auto flex min-h-full w-full max-w-phone flex-col bg-bg md:max-lg:my-6 md:max-lg:min-h-[844px] md:max-lg:overflow-hidden md:max-lg:rounded-[32px] md:max-lg:shadow-bar;
+  }
+  /* Desktop content widths – the mobile design, laid out wider */
+  .desk {
+    @apply lg:mx-auto lg:w-full lg:max-w-5xl;
+  }
+  .desk-narrow {
+    @apply lg:mx-auto lg:w-full lg:max-w-2xl;
   }
   .card {
     @apply rounded-lg bg-white shadow-blue;
@@ -33,7 +51,7 @@
     @apply rounded-lg bg-primary-50;
   }
   .field {
-    @apply w-full rounded-lg border border-primary-100 bg-white px-4 py-3 text-body text-ink placeholder:text-muted focus:border-primary focus:outline-none;
+    @apply h-10 w-full rounded-lg border border-primary-100 bg-white px-4 text-body text-ink placeholder:text-muted focus:border-primary focus:outline-none;
   }
   .link {
     @apply text-body text-ink underline underline-offset-2;
@@ -72,6 +90,10 @@
 
 :root {
   --surface: #f7f9fc;
+}
+/* white pages (Figma "login-step *") – the sticky action bar fades into white */
+.page-in {
+  --surface: #ffffff;
 }
 .sheet-in {
   --surface: #ffffff;

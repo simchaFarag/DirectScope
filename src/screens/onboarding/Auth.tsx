@@ -1,7 +1,8 @@
-import { CheckCircle2, ImagePlus, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BottomActions, Button, Radio } from '@/components/ui';
+import { BottomActions, Button, ClearField, Radio } from '@/components/ui';
+import { Icon, type IconName } from '@/components/FigmaIcon';
 import { Heading, SubScreen } from '@/components/layout';
 import { useStore } from '@/data/store';
 import type { Role } from '@/data/types';
@@ -29,7 +30,7 @@ export function Splash() {
     return () => clearTimeout(t);
   }, []);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-8">
       <Logo />
       <div className={cn('transition-opacity duration-500', ready ? 'opacity-100' : 'opacity-0')}>
         <Button onClick={() => nav(s.onboarded ? '/app/home' : '/login/phone')}>מתחילים</Button>
@@ -47,24 +48,26 @@ export function PhoneLogin() {
   return (
     <SubScreen title="הרשמה / כניסה לחשבון" onBack={() => nav('/')}>
       <Heading title="מה מספר הטלפון שלך?" sub="יישלח אליך קוד אימות לאישור המספר" />
-      <div className="px-6">
-        <div className="flex items-center gap-2 rounded-lg border border-primary-100 bg-white px-4 py-3 focus-within:border-primary" dir="ltr">
-          <span className="text-body text-muted">+972</span>
-          <span className="h-5 w-px bg-line" />
-          <input
-            inputMode="numeric"
-            autoFocus
-            value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, '').slice(0, 10))}
-            className="flex-1 bg-transparent text-body focus:outline-none"
-            placeholder="527683159"
-          />
+      {/* Figma: 48px number field (+972, number, clear) with the Israeli flag pill on its left; the note 24px below */}
+      <div className="flex flex-col gap-6 px-6">
+        <div className="flex items-center gap-2">
+          <ClearField value={phone} onChange={(v) => setPhone(v.replace(/[^\d]/g, '').slice(0, 10))} placeholder="527683159" tel autoFocus className="h-12 flex-1" />
+          <span className="flex h-10 shrink-0 items-center rounded-full border border-primary-100 px-2" aria-label="ישראל +972">
+            <Icon name="down" />
+            <span className="grid w-10 place-items-center">
+              <img src="/img/flag-il.svg" alt="" width={32} height={32} />
+            </span>
+          </span>
         </div>
-        <p className="mt-4 text-center text-caption text-muted">נשתמש במספר רק כדי לאמת את זהותך ולשמור על חשבונך מאובטח</p>
+        <p className="text-center text-body text-muted">
+          נשתמש במספר רק כדי לאמת את זהותך
+          <br />
+          לשמור על חשבונך מאובטח
+        </p>
       </div>
       <BottomActions>
         <Button
-          block
+          className="mx-auto w-[314px] max-w-full"
           disabled={!valid}
           onClick={() => {
             setUser({ phone: phone.replace(/^0/, '') });
@@ -103,34 +106,37 @@ export function Otp() {
   };
 
   return (
-    <SubScreen title="הרשמה / כניסה לחשבון">
-      <Heading title="אימות מספר טלפון" sub="נא להזין את הקוד בן 6 הספרות שנשלח אל" />
-      <p className="-mt-4 text-center text-body font-medium" dir="ltr">
-        +972 {s.user.phone}
-      </p>
-      <div className="mt-8 flex justify-center gap-2 px-6" dir="ltr">
-        {code.map((c, i) => (
-          <input
-            key={i}
-            ref={(el) => (refs.current[i] = el)}
-            value={c}
-            inputMode="numeric"
-            autoFocus={i === 0}
-            onChange={(e) => set(i, e.target.value)}
-            onKeyDown={(e) => e.key === 'Backspace' && !c && i > 0 && refs.current[i - 1]?.focus()}
-            className="h-14 w-12 rounded-lg border border-primary-100 bg-white text-center text-h2 focus:border-primary focus:outline-none"
-          />
-        ))}
+    <SubScreen title="אימות מספר טלפון">
+      {/* Figma: no title – two body lines, six 40px boxes 16px apart, then "לא קיבלת את הקוד? שלח קוד שוב" */}
+      <div className="flex flex-col gap-6 px-6 pt-12 short:pt-6">
+        <div className="flex flex-col items-center gap-2 py-4 text-center text-body">
+          <p>נא להזין את הקוד בן 6 הספרות שנשלח אל</p>
+          <p dir="ltr">972+ {s.user.phone}</p>
+        </div>
+        <div className="flex h-14 items-center justify-center gap-4" dir="ltr">
+          {code.map((c, i) => (
+            <input
+              key={i}
+              ref={(el) => (refs.current[i] = el)}
+              value={c}
+              inputMode="numeric"
+              autoFocus={i === 0}
+              aria-label={`ספרה ${i + 1}`}
+              onChange={(e) => set(i, e.target.value)}
+              onKeyDown={(e) => e.key === 'Backspace' && !c && i > 0 && refs.current[i - 1]?.focus()}
+              className="h-10 w-10 rounded-lg border border-primary-200 bg-white text-center text-body focus:border-primary focus:outline-none"
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-center gap-2 text-body">
+          <span className="text-muted">לא קיבלת את הקוד?</span>
+          <button className="leading-4 tracking-[0.042px] underline" onClick={() => setSent(true)}>
+            {sent ? 'נשלח שוב ✓' : 'שלח קוד שוב'}
+          </button>
+        </div>
       </div>
-      <div className="mt-6 text-center text-caption text-muted">
-        לא קיבלת את הקוד?{' '}
-        <button className="text-ink underline" onClick={() => setSent(true)}>
-          {sent ? 'נשלח שוב ✓' : 'שלח קוד שוב'}
-        </button>
-      </div>
-      <p className="mt-2 text-center text-caption text-muted">(בהדגמה – כל קוד בן 6 ספרות עובר)</p>
       <BottomActions>
-        <Button block disabled={!full} onClick={() => nav('/login/verified')}>
+        <Button className="mx-auto w-[314px] max-w-full" disabled={!full} onClick={() => nav('/login/verified')}>
           המשך
         </Button>
       </BottomActions>
@@ -145,39 +151,37 @@ export function Interstitial({ text, next, bg, loading, delay = 1600 }: { text: 
     const t = setTimeout(() => nav(next, { replace: true }), delay);
     return () => clearTimeout(t);
   }, [nav, next, delay]);
+  // Figma: the previous screen dimmed (#A2A9B7 at 70%); success = white pill near the top, loading = small centred card
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden bg-cover bg-center" style={{ backgroundImage: `url(${bg})` }}>
+    <div className="relative flex flex-1 flex-col items-center overflow-hidden bg-cover bg-top px-6" style={{ backgroundImage: `url(${bg})` }}>
+      <div className="absolute inset-0 bg-[rgba(162,169,183,0.7)]" />
       {loading ? (
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-primary-100 border-t-primary" />
+        <div className="animate-fade-up relative my-auto flex w-[242px] flex-col items-center overflow-hidden rounded-lg bg-white shadow-blue">
+          <div className="flex w-full justify-start px-2 pt-2">
+            <button onClick={() => nav(-1)} className="grid h-6 w-6 place-items-center rounded-full bg-primary-50 text-ink" aria-label="ביטול">
+              <X size={12} strokeWidth={1.4} />
+            </button>
+          </div>
+          <img src="/img/checking.gif" alt="" width={150} height={150} />
+          <p className="pb-4 pt-2 text-center text-lg leading-6">{text}</p>
+        </div>
       ) : (
-        <CheckCircle2 size={64} className="text-primary" strokeWidth={1.4} />
+        <div className="animate-fade-up relative mt-[101px] flex w-full max-w-[342px] items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2 shadow-yellow">
+          <p className="text-lg leading-6">{text}</p>
+          <span className="grid h-6 w-6 place-items-center">
+            <Icon name="check" />
+          </span>
+        </div>
       )}
-      <p className="font-display text-h2 font-bold">{text}</p>
     </div>
   );
 }
 
-const roles: { value: Role; label: string; tone: string }[] = [
-  { value: 'renovator', label: 'משפץ', tone: 'text-primary' },
-  { value: 'contractor', label: 'קבלן', tone: 'text-accent-dark' },
-  { value: 'architect', label: 'אדריכל', tone: 'text-accent' },
+const roles: { value: Role; label: string; icon: IconName }[] = [
+  { value: 'renovator', label: 'משפץ', icon: 'roleClient' },
+  { value: 'contractor', label: 'קבלן', icon: 'roleContractor' },
+  { value: 'architect', label: 'אדריכל', icon: 'roleArchitect' },
 ];
-
-function RoleBadge({ active, label, tone, onClick }: { active: boolean; label: string; tone: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2">
-      <span className={cn('grid h-16 w-16 place-items-center rounded-full bg-white shadow-blue ring-2 transition', active ? 'ring-primary' : 'ring-transparent')}>
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className={tone}>
-          <path d="M5 11a7 7 0 0 1 14 0" />
-          <path d="M4 11h16v1.5H4zM12 4v3" />
-          <circle cx="12" cy="15" r="3" />
-          <path d="M6 22c0-3 2.7-5 6-5s6 2 6 5" />
-        </svg>
-      </span>
-      <span className={cn('text-caption', active ? 'font-medium text-primary' : 'text-ink')}>{label}</span>
-    </button>
-  );
-}
 
 /** login-step 3 – create profile */
 export function Profile() {
@@ -192,31 +196,40 @@ export function Profile() {
   return (
     <SubScreen title="יצירת פרופיל">
       <Heading title="פרטים אישיים" sub="נעים להכיר :)" />
-      <div className="space-y-4 px-6">
-        <p className="text-center text-body">בחר\י את התפקיד המתאים לך:</p>
-        <div className="flex justify-center gap-6">
-          {roles.map((r) => (
-            <RoleBadge key={r.value} active={role === r.value} label={r.label} tone={r.tone} onClick={() => setRole(r.value)} />
-          ))}
-        </div>
-        <button onClick={() => pickImages().then(([i]) => i && setAvatar(i))} className="mx-auto flex items-center gap-2 text-body underline">
-          {avatar ? <img src={avatar} alt='' className='h-7 w-7 rounded-full object-cover' /> : <ImagePlus size={18} />} {avatar ? 'החלפת תמונה' : 'הוסף תמונת פרופיל (לא חובה)'}
-        </button>
-        <ClearField value={first} onChange={setFirst} placeholder="שם פרטי" />
-        <ClearField value={last} onChange={setLast} placeholder="שם משפחה" />
-        <div className="rounded-lg border border-primary-100 bg-white px-4 py-3">
-          <p className="mb-2 text-caption text-muted">מגדר</p>
-          <div className="flex items-center gap-6">
-            <Radio checked={gender === 'male'} onChange={() => setGender('male')} label="גבר" />
-            <span className="h-6 w-px bg-line" />
-            <Radio checked={gender === 'female'} onChange={() => setGender('female')} label="אישה" />
+      {/* Figma: roles, photo link, first / last name, gender box and the note – 24px apart */}
+      <div className="flex flex-col items-center gap-6 px-6 short:gap-4">
+        <div className="flex w-full flex-col items-center gap-2">
+          <p className="text-body">בחר\י את התפקיד המתאים לך:</p>
+          <div className="flex justify-center gap-6">
+            {roles.map((r) => (
+              <button key={r.value} onClick={() => setRole(r.value)} className="flex flex-col items-center">
+                <span className={cn('grid h-14 w-14 place-items-center rounded-full shadow-[0_0_5px_rgba(62,165,244,0.1)] transition', role === r.value ? 'bg-primary-200' : 'bg-white')}>
+                  <Icon name={r.icon} />
+                </span>
+                <span className={cn('text-caption', role === r.value && 'font-medium text-primary')}>{r.label}</span>
+              </button>
+            ))}
           </div>
         </div>
-        <p className="text-center text-caption text-muted">המידע האישי שלך ישמר בצורה מאובטחת</p>
+        <button onClick={() => pickImages().then(([i]) => i && setAvatar(i))} className="flex items-center gap-2 text-body leading-4 tracking-[0.042px] underline">
+          <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-50 text-primary">{avatar ? <img src={avatar} alt="" className="h-full w-full object-cover" /> : <Icon name="jpeg" />}</span>
+          {avatar ? 'החלפת תמונה' : 'הוסף תמונת פרופיל (לא חובה)'}
+        </button>
+        <ClearField value={first} onChange={setFirst} placeholder="שם פרטי" className="w-full" />
+        <ClearField value={last} onChange={setLast} placeholder="שם משפחה" className="w-full" />
+        <div className="flex w-full flex-col gap-2.5 rounded-lg border border-primary-100 px-4 py-2">
+          <p className="text-caption text-muted">מגדר</p>
+          <div className="flex items-start gap-4">
+            <Radio checked={gender === 'female'} onChange={() => setGender('female')} label="אישה" />
+            <span className="h-8 w-px bg-primary-100" />
+            <Radio checked={gender === 'male'} onChange={() => setGender('male')} label="גבר" />
+          </div>
+        </div>
+        <p className="text-center text-body text-muted">המידע האישי שלך ישמר בצורה מאובטחת</p>
       </div>
       <BottomActions>
         <Button
-          block
+          className="mx-auto w-[314px] max-w-full"
           disabled={!first || !last}
           onClick={() => {
             // A renovator/home owner is the project's client; contractor/architect join as professionals
@@ -228,19 +241,5 @@ export function Profile() {
         </Button>
       </BottomActions>
     </SubScreen>
-  );
-}
-
-export function ClearField({ value, onChange, placeholder, suffix }: { value: string; onChange: (v: string) => void; placeholder: string; suffix?: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-primary-100 bg-white px-4 py-3 focus-within:border-primary">
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="flex-1 bg-transparent text-body placeholder:text-muted focus:outline-none" />
-      {suffix}
-      {value && (
-        <button onClick={() => onChange('')} className="text-muted" aria-label="נקה">
-          <X size={18} />
-        </button>
-      )}
-    </div>
   );
 }
