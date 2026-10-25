@@ -1,7 +1,8 @@
 /**
- * Client-side file helpers. Images are downscaled and stored as data URLs so the
- * demo works without a server. When a backend exists, swap these for uploads to storage.
+ * Client-side file helpers. Images are downscaled in the browser. When logged in to the server they are uploaded
+ * right away and the helpers return file urls; in the demo (or if the upload can't reach the server) they return data URLs.
  */
+import { api, dataUrlToFile, getToken } from './api';
 
 export function pickFiles(opts: { accept: string; multiple?: boolean; capture?: boolean }): Promise<File[]> {
   return new Promise((resolve) => {
@@ -37,15 +38,29 @@ export function imageToDataUrl(file: File, max = 900, quality = 0.72): Promise<s
   });
 }
 
-export async function pickImages(opts: { multiple?: boolean; capture?: boolean } = {}) {
-  const files = await pickFiles({ accept: 'image/*', ...opts });
-  return Promise.all(files.map((f) => imageToDataUrl(f)));
+/** Uploads when logged in; returns undefined when there's no server so callers can keep the local copy. */
+async function tryUpload(files: File[]) {
+  if (!getToken() || !files.length) return undefined;
+  try {
+    return (await api.upload(files)).map((f) => f.url);
+  } catch {
+    return undefined;
+  }
 }
 
-/** Documents (PDF/Word/images). Only the name is kept in the demo; images also get a preview. */
+export async function pickImages(opts: { multiple?: boolean; capture?: boolean } = {}) {
+  const files = await pickFiles({ accept: 'image/*', ...opts });
+  const local = await Promise.all(files.map((f) => imageToDataUrl(f)));
+  const urls = await tryUpload(await Promise.all(local.map((d, i) => dataUrlToFile(d, `image-${i + 1}.jpg`))));
+  return urls ?? local;
+}
+
+/** Documents (PDF/Word/images). Uploaded when logged in (url); images also get a preview. */
 export async function pickDocument() {
   const [file] = await pickFiles({ accept: '.pdf,.doc,.docx,image/*' });
   if (!file) return undefined;
-  const preview = file.type.startsWith('image/') ? await imageToDataUrl(file, 600) : undefined;
-  return { name: file.name, preview };
+  const isImage = file.type.startsWith('image/');
+  const [url] = (await tryUpload([file])) ?? [];
+  const preview = isImage ? (url ?? (await imageToDataUrl(file, 600))) : undefined;
+  return { name: file.name, preview, url };
 }

@@ -508,7 +508,7 @@ export function ReceiptForm() {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [file, setFile] = useState<{ name: string; preview?: string }>();
+  const [file, setFile] = useState<{ name: string; preview?: string; url?: string }>();
   return (
     <SubScreen title="פירוט הוצאות" sheet>
       <Heading title="פירוט הוצאות" sub="הוספת חשבונית/קבלה" />
@@ -533,7 +533,7 @@ export function ReceiptForm() {
           className="mx-auto"
           disabled={!stage || !title || !amount}
           onClick={() => {
-            addReceipt({ stageId: stage!, title, amount: +amount, date, preview: file?.preview });
+            addReceipt({ stageId: stage!, title, amount: +amount, date, preview: file?.preview, fileUrl: file?.url });
             toast('ההוצאה נוספה');
             nav(-1);
           }}

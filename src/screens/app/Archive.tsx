@@ -25,7 +25,7 @@ function DocUpload({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { addDoc } = useStore();
   const toast = useToast();
   const options = useStageOptions();
-  const [file, setFile] = useState<{ name: string; preview?: string }>();
+  const [file, setFile] = useState<{ name: string; preview?: string; url?: string }>();
   const [title, setTitle] = useState('');
   const [stage, setStage] = useState<string>('general');
   const close = () => {
@@ -54,7 +54,7 @@ function DocUpload({ open, onClose }: { open: boolean; onClose: () => void }) {
           block
           disabled={!file || !title}
           onClick={() => {
-            addDoc({ title, stageId: stage, fileName: file!.name, preview: file!.preview });
+            addDoc({ title, stageId: stage, fileName: file!.name, preview: file!.preview, fileUrl: file!.url });
             toast('המסמך נשמר בארכיון');
             close();
           }}

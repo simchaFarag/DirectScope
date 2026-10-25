@@ -161,8 +161,8 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           </span>
         </div>
 
-        {/* Demo helper: switch the viewer role to preview the contractor experience */}
-        <div className="mt-auto rounded-lg bg-primary-50 p-3">
+        {/* Demo helper: switch the viewer role to preview the contractor experience (hidden when using the real server) */}
+        <div className={cn('mt-auto rounded-lg bg-primary-50 p-3', s.remote && 'hidden')}>
           <p className="mb-2 text-caption text-muted">מצב תצוגה (הדגמה)</p>
           <div className="flex gap-2">
             {(['client', 'contractor'] as const).map((r) => (
@@ -184,7 +184,7 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           }}
           className="mt-4 flex items-center gap-2 text-caption text-muted"
         >
-          <LogOut size={16} /> התחלה מחדש (איפוס דמו)
+          <LogOut size={16} /> {s.remote ? 'התנתקות' : 'התחלה מחדש (איפוס דמו)'}
         </button>
       </aside>
     </div>

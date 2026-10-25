@@ -1,5 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useToast } from '@/components/toast';
+import { api, auth, getToken } from '@/lib/api';
 import * as mock from './mock';
+import { clean, errorText, fromServer, serverUnavailable, type Access, type ServerState } from './remote';
 import type {
   Contact,
   DocItem,
@@ -36,6 +39,8 @@ export interface State {
   members: Member[];
   quotesCount: number;
   termsAccepted: boolean;
+  /** set once the user is logged in and the project lives on the server; without it everything stays local (demo) */
+  remote?: { projectId: string; access?: Access };
 }
 
 const initial: State = {
@@ -65,7 +70,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...initial, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<State>;
+      // a cached server project without a login token belongs to someone who logged out
+      if (saved.remote && !getToken()) return initial;
+      return { ...initial, ...saved };
+    }
   } catch {
     /* storage unavailable */
   }
@@ -86,16 +96,123 @@ function useStoreValue() {
   const patch = (p: Partial<State> | ((s: State) => Partial<State>)) => setS((prev) => ({ ...prev, ...(typeof p === 'function' ? p(prev) : p) }));
   const mapStage = (id: string, fn: (st: Stage) => Stage) => patch((p) => ({ stages: p.stages.map((st) => (st.id === id ? fn(st) : st)) }));
 
-  const actions = {
-    reset: () => setS(initial),
-    finishOnboarding: () => patch({ onboarded: true }),
-    setUser: (u: Partial<User>) => patch((p) => ({ user: { ...p.user, ...u } })),
-    setProject: (pr: Partial<Project>) => patch((p) => ({ project: { ...p.project, ...pr } })),
-    setQuotesCount: (n: number) => patch({ quotesCount: n }),
-    acceptTerms: () => patch({ termsAccepted: true }),
+  /* ---------- server sync ----------
+   * Every action updates the screen right away (as in the demo). When the project lives on the server the same change is
+   * sent to the API; calls run one after another, and once the queue is empty the whole project is reloaded so ids and
+   * totals come from the database. A failed call shows a toast and the reload puts the screen back in line with the server.
+   */
+  const toast = useToast();
+  const ref = useRef(s);
+  ref.current = s;
+  const pid = useRef(s.remote?.projectId);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const pending = useRef(0);
 
-    updateStage: (id: string, st: Partial<Stage>) => mapStage(id, (x) => ({ ...x, ...st })),
-    addStage: (name: string, budget: number, duration: string) =>
+  const refresh = async () => {
+    if (!pid.current) return;
+    const st = await api.get<ServerState>(`/projects/${pid.current}/state`);
+    setS((prev) => ({ ...prev, ...fromServer(st) }));
+  };
+
+  const enqueue = (op: () => Promise<unknown>) => {
+    pending.current++;
+    queue.current = queue.current
+      .then(op)
+      .catch((e) => toast(errorText(e), 'info'))
+      .finally(() => {
+        if (--pending.current === 0) refresh().catch(() => {});
+      });
+  };
+  /** project-scoped API call – skipped in demo mode */
+  const sync = (op: (base: string) => Promise<unknown>) => {
+    if (pid.current) enqueue(() => op(`/projects/${pid.current}`));
+  };
+  /** user-scoped API call – needs only a login */
+  const syncMe = (op: () => Promise<unknown>) => {
+    if (getToken()) enqueue(op);
+  };
+
+  /** After OTP: takes the server user and opens their project if they have one. Returns whether a project was found. */
+  const login = async (user: Partial<User>) => {
+    patch((p) => ({ user: { ...p.user, ...user } }));
+    const projects = await api.get<{ id: string }[]>('/projects');
+    if (!projects.length) return false;
+    pid.current = projects[0].id;
+    await refresh();
+    return true;
+  };
+
+  // returning user: reload the project from the server on start
+  useEffect(() => {
+    if (!getToken()) return;
+    api
+      .get<User>('/me')
+      .then(async (u) => {
+        if (pid.current) await refresh();
+        else await login(u);
+      })
+      .catch((e) => {
+        // 401 = the login expired (api.ts already dropped the token); offline = keep showing the cached copy
+        if (!serverUnavailable(e) && !getToken()) {
+          pid.current = undefined;
+          setS(initial);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Setup step 4/4 → share: creates the project with everything collected during onboarding */
+  const createRemoteProject = () =>
+    enqueue(async () => {
+      const p = ref.current;
+      const created = await api.post<{ id: string }>('/projects', {
+        ...clean(p.project),
+        estimatedBudget: p.project.estimatedBudget ?? null,
+        onboarded: true,
+        quotesCount: p.quotesCount,
+        stages: p.stages.map((st) => ({ ...clean(st), paid: 0, tasks: st.tasks.map((t) => t.title) })),
+      });
+      const base = `/projects/${created.id}`;
+      for (const e of p.extras) await api.post(`${base}/extras`, clean(e));
+      for (const i of p.inspiration) await api.post(`${base}/inspiration`, clean(i));
+      for (const m of p.members) await api.post(`${base}/members`, clean(m));
+      pid.current = created.id;
+    });
+
+  const actions = {
+    reset: () => {
+      auth.logout();
+      pid.current = undefined;
+      setS(initial);
+    },
+    login,
+    finishOnboarding: () => {
+      patch({ onboarded: true });
+      if (getToken() && !pid.current) createRemoteProject();
+    },
+    setUser: (u: Partial<User>) => {
+      patch((p) => ({ user: { ...p.user, ...u } }));
+      const { firstName, lastName, gender, role, avatar } = u;
+      const body = clean({ firstName, lastName, gender, role, avatar });
+      if (Object.values(body).some((v) => v !== undefined)) syncMe(() => api.patch('/me', body));
+    },
+    setProject: (pr: Partial<Project>) => {
+      patch((p) => ({ project: { ...p.project, ...pr } }));
+      sync((b) => api.patch(b, clean(pr)));
+    },
+    setQuotesCount: (n: number) => patch({ quotesCount: n }),
+    acceptTerms: () => {
+      patch({ termsAccepted: true });
+      syncMe(() => api.post('/me/accept-terms'));
+    },
+
+    updateStage: (id: string, st: Partial<Stage>) => {
+      mapStage(id, (x) => ({ ...x, ...st }));
+      sync((b) => api.patch(`${b}/stages/${id}`, clean({ ...st, tasks: undefined })));
+    },
+    addStage: (name: string, budget: number, duration: string) => {
+      const end = ref.current.project.endDate;
+      sync((b) => api.post(`${b}/stages`, { name, budget, duration, startDate: end, endDate: end }));
       patch((p) => ({
         stages: [
           ...p.stages,
@@ -114,21 +231,45 @@ function useStoreValue() {
             memberAvatars: [],
           },
         ],
-      })),
-    setTasks: (stageId: string, tasks: Task[]) => mapStage(stageId, (x) => ({ ...x, tasks })),
+      }));
+    },
+    setTasks: (stageId: string, tasks: Task[]) => {
+      mapStage(stageId, (x) => ({ ...x, tasks }));
+      // tasks created on this device have local ids – the server creates those and keeps the rest
+      sync((b) => api.put(`${b}/stages/${stageId}/tasks`, tasks.map((t) => clean({ ...t, note: t.note ?? null, photo: t.photo ?? null }))));
+    },
 
-    addExtra: (e: Omit<ExtraExpense, 'id'>) => patch((p) => ({ extras: [...p.extras, { ...e, id: uid() }] })),
-    addReceipt: (r: Omit<Receipt, 'id'>) =>
+    addExtra: (e: Omit<ExtraExpense, 'id'>) => {
+      patch((p) => ({ extras: [...p.extras, { ...e, id: uid() }] }));
+      sync((b) => api.post(`${b}/extras`, clean(e)));
+    },
+    addReceipt: (r: Omit<Receipt, 'id'>) => {
       patch((p) => ({
         receipts: [{ ...r, id: uid() }, ...p.receipts],
         stages: p.stages.map((st) => (st.id === r.stageId ? { ...st, paid: st.paid + r.amount } : st)),
-      })),
-    toggleShopping: (id: string) => patch((p) => ({ shopping: p.shopping.map((x) => (x.id === id ? { ...x, done: !x.done } : x)) })),
-    addShopping: (stageId: string, title: string) => patch((p) => ({ shopping: [...p.shopping, { id: uid(), stageId, title, done: false }] })),
-    updateShopping: (id: string, v: Partial<ShoppingItem>) => patch((p) => ({ shopping: p.shopping.map((x) => (x.id === id ? { ...x, ...v } : x)) })),
-    removeShopping: (id: string) => patch((p) => ({ shopping: p.shopping.filter((x) => x.id !== id) })),
+      }));
+      sync((b) => api.post(`${b}/receipts`, clean(r)));
+    },
+    toggleShopping: (id: string) => {
+      const done = !ref.current.shopping.find((x) => x.id === id)?.done;
+      patch((p) => ({ shopping: p.shopping.map((x) => (x.id === id ? { ...x, done } : x)) }));
+      sync((b) => api.patch(`${b}/shopping/${id}`, { done }));
+    },
+    addShopping: (stageId: string, title: string) => {
+      patch((p) => ({ shopping: [...p.shopping, { id: uid(), stageId, title, done: false }] }));
+      sync((b) => api.post(`${b}/shopping`, { stageId, title }));
+    },
+    updateShopping: (id: string, v: Partial<ShoppingItem>) => {
+      patch((p) => ({ shopping: p.shopping.map((x) => (x.id === id ? { ...x, ...v } : x)) }));
+      sync((b) => api.patch(`${b}/shopping/${id}`, clean({ ...v, id: undefined })));
+    },
+    removeShopping: (id: string) => {
+      patch((p) => ({ shopping: p.shopping.filter((x) => x.id !== id) }));
+      sync((b) => api.del(`${b}/shopping/${id}`));
+    },
 
-    addUpdate: (stageId: string, text: string, photos: string[] = []) =>
+    addUpdate: (stageId: string, text: string, photos: string[] = []) => {
+      sync((b) => api.post(`${b}/updates`, clean({ stageId, text, photos })));
       patch((p) => ({
         updates: [
           {
@@ -146,8 +287,9 @@ function useStoreValue() {
           },
           ...p.updates,
         ],
-      })),
-    approveUpdate: (id: string) =>
+      }));
+    },
+    approveUpdate: (id: string) => {
       patch((p) => {
         const u = p.updates.find((x) => x.id === id);
         return {
@@ -155,17 +297,24 @@ function useStoreValue() {
           // approved updates with a photo move to the archive gallery
           gallery: [...(u?.photos?.length ? u.photos : u?.photo ? [u.photo] : []).map((image) => ({ id: uid(), title: 'עידכון יומי', date: today(), image })), ...p.gallery],
         };
-      }),
-    rejectUpdate: (id: string, reason: string) =>
-      patch((p) => ({ updates: p.updates.map((x) => (x.id === id ? { ...x, status: 'rejected', rejectReason: reason } : x)) })),
-    addComment: (updateId: string, text: string) =>
+      });
+      sync((b) => api.post(`${b}/updates/${id}/approve`));
+    },
+    rejectUpdate: (id: string, reason: string) => {
+      patch((p) => ({ updates: p.updates.map((x) => (x.id === id ? { ...x, status: 'rejected', rejectReason: reason } : x)) }));
+      sync((b) => api.post(`${b}/updates/${id}/reject`, { reason }));
+    },
+    addComment: (updateId: string, text: string) => {
       patch((p) => ({
         updates: p.updates.map((x) =>
           x.id === updateId ? { ...x, comments: [...x.comments, { id: uid(), author: p.user.firstName, text, mine: true }] } : x,
         ),
-      })),
+      }));
+      sync((b) => api.post(`${b}/updates/${updateId}/comments`, { text }));
+    },
 
-    addException: (e: Pick<ExceptionReq, 'stageId' | 'title' | 'description' | 'amount' | 'photos'>) =>
+    addException: (e: Pick<ExceptionReq, 'stageId' | 'title' | 'description' | 'amount' | 'photos'>) => {
+      sync((b) => api.post(`${b}/exceptions`, clean(e)));
       patch((p) => ({
         exceptions: [
           {
@@ -178,17 +327,24 @@ function useStoreValue() {
           },
           ...p.exceptions,
         ],
-      })),
-    setExceptionStatus: (id: string, status: ExceptionReq['status'], rejectReason?: string) =>
-      patch((p) => ({ exceptions: p.exceptions.map((x) => (x.id === id ? { ...x, status, rejectReason } : x)) })),
+      }));
+    },
+    setExceptionStatus: (id: string, status: ExceptionReq['status'], rejectReason?: string) => {
+      patch((p) => ({ exceptions: p.exceptions.map((x) => (x.id === id ? { ...x, status, rejectReason } : x)) }));
+      sync((b) => api.post(`${b}/exceptions/${id}/status`, { status, reason: rejectReason }));
+    },
 
-    addDoc: (d: Omit<DocItem, 'id' | 'date'>) => patch((p) => ({ docs: [{ ...d, id: uid(), date: today() }, ...p.docs] })),
+    addDoc: (d: Omit<DocItem, 'id' | 'date'>) => {
+      patch((p) => ({ docs: [{ ...d, id: uid(), date: today() }, ...p.docs] }));
+      sync((b) => api.post(`${b}/documents`, clean(d)));
+    },
 
     /**
      * Marks a task done, optionally with documentation (designer note: "להוסיף אפשרות של תיעוד בהשלמת המשימה").
      * Contractor completion creates a pending update so the client is notified ("ברגע שהצד השני מסמן שמשימה בוצעה צריך לקפוץ").
      */
-    completeTask: (stageId: string, taskId: string, note?: string, photo?: string) =>
+    completeTask: (stageId: string, taskId: string, note?: string, photo?: string) => {
+      sync((b) => api.post(`${b}/stages/${stageId}/tasks/${taskId}/complete`, clean({ note, photo })));
       patch((p) => {
         const st = p.stages.find((x) => x.id === stageId);
         const task = st?.tasks.find((x) => x.id === taskId);
@@ -217,22 +373,37 @@ function useStoreValue() {
             : p.updates,
           gallery: photo ? [{ id: uid(), title: task.title, date: today(), image: photo }, ...p.gallery] : p.gallery,
         };
-      }),
+      });
+    },
 
-    addReminder: (stageId: string, text: string) =>
-      patch((p) => ({ reminders: [...p.reminders, { id: uid(), stageId, text, color: p.reminders.length % 2 ? 'yellow' : 'blue' }] })),
+    addReminder: (stageId: string, text: string) => {
+      const color = ref.current.reminders.length % 2 ? 'yellow' : 'blue';
+      patch((p) => ({ reminders: [...p.reminders, { id: uid(), stageId, text, color }] }));
+      sync((b) => api.post(`${b}/reminders`, { stageId, text, color }));
+    },
 
-    addInspiration: (title: string, image?: string) => patch((p) => ({ inspiration: [{ id: uid(), title, image }, ...p.inspiration] })),
-    addGallery: (title: string, image?: string) =>
-      patch((p) => ({ gallery: [{ id: uid(), title, image, date: new Date().toISOString().slice(0, 10) }, ...p.gallery] })),
+    addInspiration: (title: string, image?: string) => {
+      patch((p) => ({ inspiration: [{ id: uid(), title, image }, ...p.inspiration] }));
+      sync((b) => api.post(`${b}/inspiration`, clean({ title, image })));
+    },
+    addGallery: (title: string, image?: string) => {
+      patch((p) => ({ gallery: [{ id: uid(), title, image, date: new Date().toISOString().slice(0, 10) }, ...p.gallery] }));
+      sync((b) => api.post(`${b}/gallery`, clean({ title, image })));
+    },
 
-    saveMember: (m: Omit<Member, 'id'> & { id?: string }) =>
+    saveMember: (m: Omit<Member, 'id'> & { id?: string }) => {
       patch((p) =>
         m.id
           ? { members: p.members.map((x) => (x.id === m.id ? { ...x, ...m, id: x.id } : x)) }
           : { members: [...p.members, { ...m, id: uid() }] },
-      ),
-    removeMember: (id: string) => patch((p) => ({ members: p.members.filter((x) => x.id !== id) })),
+      );
+      const { id, ...body } = m;
+      sync((b) => (id ? api.patch(`${b}/members/${id}`, clean(body)) : api.post(`${b}/members`, clean(body))));
+    },
+    removeMember: (id: string) => {
+      patch((p) => ({ members: p.members.filter((x) => x.id !== id) }));
+      sync((b) => api.del(`${b}/members/${id}`));
+    },
   };
 
   return { s, ...actions };

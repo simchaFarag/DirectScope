@@ -22,12 +22,13 @@ function ScrollToTop() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <StoreProvider>
-        <ToastProvider>
+      {/* toasts wrap the store so failed server saves can be reported */}
+      <ToastProvider>
+        <StoreProvider>
           <ScrollToTop />
           <App />
-        </ToastProvider>
-      </StoreProvider>
+        </StoreProvider>
+      </ToastProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

@@ -5,5 +5,9 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  server: { host: true },
+  server: {
+    host: true,
+    // the Node API (server/) runs on :4000 during development
+    proxy: { '/api': 'http://localhost:4000', '/uploads': 'http://localhost:4000' },
+  },
 });

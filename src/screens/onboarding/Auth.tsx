@@ -5,7 +5,10 @@ import { BottomActions, Button, ClearField, Radio } from '@/components/ui';
 import { Icon, type IconName } from '@/components/FigmaIcon';
 import { Heading, SubScreen } from '@/components/layout';
 import { useStore } from '@/data/store';
-import type { Role } from '@/data/types';
+import { errorText, serverUnavailable } from '@/data/remote';
+import { useToast } from '@/components/toast';
+import { auth } from '@/lib/api';
+import type { Role, User } from '@/data/types';
 import { pickImages } from '@/lib/files';
 import { cn } from '@/lib/format';
 
@@ -43,7 +46,9 @@ export function Splash() {
 export function PhoneLogin() {
   const nav = useNavigate();
   const { s, setUser } = useStore();
+  const toast = useToast();
   const [phone, setPhone] = useState(s.user.phone);
+  const [busy, setBusy] = useState(false);
   const valid = /^0?5\d{8}$/.test(phone.replace(/\D/g, ''));
   return (
     <SubScreen title="הרשמה / כניסה לחשבון" onBack={() => nav('/')}>
@@ -68,9 +73,19 @@ export function PhoneLogin() {
       <BottomActions>
         <Button
           className="mx-auto w-[314px] max-w-full"
-          disabled={!valid}
-          onClick={() => {
-            setUser({ phone: phone.replace(/^0/, '') });
+          disabled={!valid || busy}
+          onClick={async () => {
+            const local = phone.replace(/^0/, '');
+            setUser({ phone: local });
+            setBusy(true);
+            try {
+              await auth.requestCode(local);
+            } catch (e) {
+              // no server behind the app → continue as the local demo
+              if (!serverUnavailable(e)) return toast(errorText(e), 'info');
+            } finally {
+              setBusy(false);
+            }
             nav('/login/otp');
           }}
         >
@@ -84,7 +99,9 @@ export function PhoneLogin() {
 /** login-step 2 */
 export function Otp() {
   const nav = useNavigate();
-  const { s } = useStore();
+  const { s, login } = useStore();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string[]>(Array(6).fill(''));
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [sent, setSent] = useState(false);
@@ -130,13 +147,33 @@ export function Otp() {
         </div>
         <div className="flex items-center justify-center gap-2 text-body">
           <span className="text-muted">לא קיבלת את הקוד?</span>
-          <button className="leading-4 tracking-[0.042px] underline" onClick={() => setSent(true)}>
+          <button className="leading-4 tracking-[0.042px] underline" onClick={() => auth.requestCode(s.user.phone).then(() => setSent(true), (e) => (serverUnavailable(e) ? setSent(true) : toast(errorText(e), 'info')))}>
             {sent ? 'נשלח שוב ✓' : 'שלח קוד שוב'}
           </button>
         </div>
       </div>
       <BottomActions>
-        <Button className="mx-auto w-[314px] max-w-full" disabled={!full} onClick={() => nav('/login/verified')}>
+        <Button
+          className="mx-auto w-[314px] max-w-full"
+          disabled={!full || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const r = await auth.verify(s.user.phone, code.join(''));
+              // a returning user with a project goes straight home; new users continue to the profile and project setup
+              if (!r.isNew && (await login(r.user as Partial<User>))) return nav('/app/home', { replace: true });
+            } catch (e) {
+              if (!serverUnavailable(e)) {
+                setCode(Array(6).fill(''));
+                refs.current[0]?.focus();
+                return toast(errorText(e), 'info');
+              }
+            } finally {
+              setBusy(false);
+            }
+            nav('/login/verified');
+          }}
+        >
           המשך
         </Button>
       </BottomActions>

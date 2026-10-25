@@ -64,7 +64,7 @@ export function FileViewer({ kind }: { kind: 'doc' | 'receipt' }) {
         </dl>
       </div>
       <BottomActions>
-        <Button className="flex-1" onClick={() => toast('ההורדה תהיה זמינה אחרי חיבור לשרת', 'info')}>
+        <Button className="flex-1" onClick={() => (item.fileUrl ? window.open(item.fileUrl, '_blank', 'noopener') : toast('ההורדה תהיה זמינה אחרי חיבור לשרת', 'info'))}>
           <Download size={16} /> הורדה
         </Button>
         <Button variant="outline" className="flex-1" onClick={() => share(item.title)}>

@@ -82,6 +82,8 @@ export interface Receipt {
   amount: number;
   date: string;
   preview?: string;
+  /** uploaded file (server mode) */
+  fileUrl?: string;
 }
 
 export interface ShoppingItem {
@@ -144,6 +146,8 @@ export interface DocItem {
   date: string;
   fileName?: string;
   preview?: string;
+  /** uploaded file (server mode) */
+  fileUrl?: string;
 }
 
 export interface GalleryItem {

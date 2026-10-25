@@ -30,4 +30,9 @@ src/
     app/        Home, Budget, Schedule, Archive, Updates, Misc (עזרה, תנאי שימוש, תשלום, פרופיל)
 ```
 
-כרגע כל הנתונים נשמרים מקומית בדפדפן. השלב הבא הוא חיבור לשרת (אימות בטלפון, מסד נתונים ואחסון קבצים). פירוט ב-SPEC §6–7.
+כרגע המסכים שומרים את הנתונים מקומית בדפדפן. השרת (Node + MySQL) נמצא ב-[server/](server/README.md): אימות בטלפון, מסד נתונים, העלאת קבצים והרשאות. החיבור מצד האפליקציה עובר דרך `src/lib/api.ts`.
+
+```bash
+docker compose up -d      # MySQL מקומי
+npm run server:dev        # API ב-http://localhost:4000
+```

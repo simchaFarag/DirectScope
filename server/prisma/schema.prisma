@@ -1,0 +1,425 @@
+// DirectScope – database schema (mirrors docs/SPEC.md §4 and src/data/types.ts)
+// To switch to PostgreSQL: change provider to "postgresql" and DATABASE_URL, then recreate migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  client
+  contractor
+  architect
+  renovator
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum ProjectType {
+  renovation
+  addition
+  newHome
+  other
+}
+
+enum MemberRole {
+  professional
+  family
+  renovator
+}
+
+enum Permission {
+  view
+  edit
+}
+
+enum StageIcon {
+  general
+  demolition
+  plumbing
+  electric
+  ceramic
+  extras
+}
+
+enum TaskStatus {
+  done
+  inProgress
+  todo
+}
+
+enum ExpenseKind {
+  architect
+  designer
+  surveyor
+  fee
+  other
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ReminderColor {
+  yellow
+  blue
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+}
+
+model User {
+  id              String    @id @default(cuid())
+  phone           String    @unique @db.VarChar(20)
+  firstName       String    @default("") @db.VarChar(80)
+  lastName        String    @default("") @db.VarChar(80)
+  gender          Gender    @default(male)
+  role            Role      @default(client)
+  avatar          String?   @db.VarChar(500)
+  termsAcceptedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  ownedProjects Project[]      @relation("ProjectOwner")
+  memberships   Member[]
+  updates       Update[]
+  comments      Comment[]
+  exceptions    ExceptionReq[]
+  subscription  Subscription?
+}
+
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String    @db.VarChar(20)
+  codeHash   String    @db.VarChar(128)
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}
+
+model Project {
+  id              String      @id @default(cuid())
+  ownerId         String
+  name            String      @db.VarChar(120)
+  type            ProjectType @default(renovation)
+  /// TEXT columns can't have a default in MySQL – the API sends "" when empty
+  description     String      @db.Text
+  address         String      @default("") @db.VarChar(255)
+  estimatedBudget Int?
+  startDate       DateTime    @db.Date
+  endDate         DateTime    @db.Date
+  onboarded       Boolean     @default(false)
+  quotesCount     Int         @default(1)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  owner       User           @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     Member[]
+  contacts    Contact[]
+  quotes      Quote[]
+  stages      Stage[]
+  extras      ExtraExpense[]
+  receipts    Receipt[]
+  shopping    ShoppingItem[]
+  updates     Update[]
+  exceptions  ExceptionReq[]
+  reminders   Reminder[]
+  documents   Document[]
+  gallery     GalleryItem[]
+  inspiration Inspiration[]
+
+  @@index([ownerId])
+}
+
+/// A person invited to the project. userId is linked automatically when someone logs in with that phone.
+model Member {
+  id         String     @id @default(cuid())
+  projectId  String
+  userId     String?
+  name       String     @db.VarChar(120)
+  phone      String     @db.VarChar(20)
+  role       MemberRole @default(professional)
+  permission Permission @default(view)
+  avatar     String?    @db.VarChar(500)
+  createdAt  DateTime   @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, phone])
+  @@index([phone])
+  @@index([userId])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String   @db.VarChar(120)
+  title     String   @default("") @db.VarChar(120)
+  phone     String   @db.VarChar(20)
+  avatar    String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Quote {
+  id             String   @id @default(cuid())
+  projectId      String
+  contractorName String   @db.VarChar(120)
+  fileUrl        String?  @db.VarChar(500)
+  total          Int?
+  matchPercent   Int?
+  missingItems   Json?
+  missingDocs    Json?
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Stage {
+  id             String    @id @default(cuid())
+  projectId      String
+  order          Int
+  name           String    @db.VarChar(120)
+  icon           StageIcon @default(general)
+  budget         Int       @default(0)
+  contractAmount Int       @default(0)
+  paid           Int       @default(0)
+  duration       String    @default("") @db.VarChar(60)
+  startDate      DateTime  @db.Date
+  endDate        DateTime  @db.Date
+  /// string[] of avatar urls shown on the stage card
+  memberAvatars  Json
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+  receipts   Receipt[]
+  shopping   ShoppingItem[]
+  updates    Update[]
+  exceptions ExceptionReq[]
+  reminders  Reminder[]
+  documents  Document[]
+
+  @@index([projectId, order])
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  stageId   String
+  order     Int        @default(0)
+  title     String     @db.VarChar(255)
+  status    TaskStatus @default(todo)
+  note      String?    @db.Text
+  photo     String?    @db.VarChar(500)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  stage Stage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([stageId, order])
+}
+
+model ExtraExpense {
+  id        String      @id @default(cuid())
+  projectId String
+  kind      ExpenseKind
+  title     String      @db.VarChar(120)
+  amount    Int
+  tasks     Int?
+  duration  String?     @db.VarChar(60)
+  createdAt DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  projectId String
+  stageId   String
+  title     String   @db.VarChar(255)
+  amount    Int
+  date      DateTime @db.Date
+  fileUrl   String?  @db.VarChar(500)
+  preview   String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage   Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([stageId])
+}
+
+model ShoppingItem {
+  id        String   @id @default(cuid())
+  projectId String
+  stageId   String
+  title     String   @db.VarChar(255)
+  done      Boolean  @default(false)
+  photo     String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage   Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([stageId])
+}
+
+model Update {
+  id           String         @id @default(cuid())
+  projectId    String
+  /// null = "general" (not tied to a stage)
+  stageId      String?
+  authorId     String?
+  /// author name/title are snapshotted so the history stays readable if the user changes
+  authorName   String         @db.VarChar(160)
+  authorTitle  String         @db.VarChar(120)
+  avatar       String?        @db.VarChar(500)
+  text         String         @db.Text
+  /// string[] of image urls
+  photos       Json
+  status       ApprovalStatus @default(pending)
+  rejectReason String?        @db.Text
+  createdAt    DateTime       @default(now())
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage    Stage?    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  author   User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  comments Comment[]
+
+  @@index([projectId, createdAt])
+  @@index([stageId])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  updateId   String
+  authorId   String?
+  authorName String   @db.VarChar(160)
+  text       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  update Update @relation(fields: [updateId], references: [id], onDelete: Cascade)
+  author User?  @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([updateId])
+}
+
+model ExceptionReq {
+  id           String         @id @default(cuid())
+  projectId    String
+  stageId      String
+  authorId     String?
+  authorName   String         @db.VarChar(160)
+  authorTitle  String         @db.VarChar(120)
+  avatar       String?        @db.VarChar(500)
+  title        String         @db.VarChar(255)
+  description  String         @db.Text
+  amount       Int
+  photos       Json
+  status       ApprovalStatus @default(pending)
+  rejectReason String?        @db.Text
+  createdAt    DateTime       @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage   Stage   @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([stageId])
+}
+
+model Reminder {
+  id        String        @id @default(cuid())
+  projectId String
+  /// null = "general" (not tied to a stage)
+  stageId   String?
+  text      String        @db.Text
+  color     ReminderColor @default(yellow)
+  createdAt DateTime      @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage   Stage?  @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  projectId String
+  /// null = "general" (not tied to a stage)
+  stageId   String?
+  title     String   @db.VarChar(255)
+  date      DateTime @db.Date
+  fileName  String?  @db.VarChar(255)
+  fileUrl   String?  @db.VarChar(500)
+  preview   String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stage   Stage?  @relation(fields: [stageId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+}
+
+model GalleryItem {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String   @db.VarChar(255)
+  date      DateTime @db.Date
+  image     String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, date])
+}
+
+model Inspiration {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String   @db.VarChar(120)
+  image     String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Subscription {
+  id         String             @id @default(cuid())
+  userId     String             @unique
+  cardLast4  String?            @db.VarChar(4)
+  monthly    Int                @default(64)
+  nextCharge DateTime?          @db.Date
+  status     SubscriptionStatus @default(active)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

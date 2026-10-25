@@ -1,9 +1,11 @@
 // Minimal service worker: network-first, falls back to cache so the app opens offline.
-const CACHE = 'directscope-v1';
+const CACHE = 'directscope-v2';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
+  // API responses are private and must always be fresh
+  if (new URL(e.request.url).pathname.startsWith('/api/')) return;
   e.respondWith(
     fetch(e.request)
       .then((res) => {
