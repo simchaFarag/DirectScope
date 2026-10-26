@@ -156,16 +156,17 @@ function CreditCardArt({ last4 }: { last4: string }) {
 }
 
 export function Payment() {
-  const [card, setCard] = useState('1234');
+  // kept in the store (and on the server when logged in) so the card survives leaving the screen
+  const { s, setCard, setSubscriptionCancelled: setCancelled } = useStore();
+  const { cardLast4: card, cancelled } = s.subscription;
   const [open, setOpen] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const toast = useToast();
   const [num, setNum] = useState('');
   const [holder, setHolder] = useState('');
   const [cvv, setCvv] = useState('');
   const [exp, setExp] = useState('');
-  const next = new Date(Date.now() + 23 * 86400000).toISOString().slice(0, 10);
+  const next = s.subscription.nextCharge ?? new Date(Date.now() + 23 * 86400000).toISOString().slice(0, 10);
   const valid = holder && num.replace(/\D/g, '').length >= 15 && cvv.length >= 3 && /^\d{2}\/\d{2}$/.test(exp);
 
   return (

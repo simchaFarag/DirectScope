@@ -39,6 +39,8 @@ export interface State {
   members: Member[];
   quotesCount: number;
   termsAccepted: boolean;
+  /** payment screen – only the last 4 digits are ever kept */
+  subscription: { cardLast4: string; cancelled: boolean; nextCharge?: string };
   /** set once the user is logged in and the project lives on the server; without it everything stays local (demo) */
   remote?: { projectId: string; access?: Access };
 }
@@ -61,6 +63,7 @@ const initial: State = {
   members: mock.mockMembers,
   quotesCount: 1,
   termsAccepted: false,
+  subscription: { cardLast4: '1234', cancelled: false },
 };
 
 const KEY = 'directscope.state.v3';
@@ -110,8 +113,15 @@ function useStoreValue() {
 
   const refresh = async () => {
     if (!pid.current) return;
-    const st = await api.get<ServerState>(`/projects/${pid.current}/state`);
-    setS((prev) => ({ ...prev, ...fromServer(st) }));
+    const [st, sub] = await Promise.all([
+      api.get<ServerState>(`/projects/${pid.current}/state`),
+      api.get<{ cardLast4?: string; status: 'active' | 'canceled'; nextCharge?: string } | null>('/me/subscription'),
+    ]);
+    setS((prev) => ({
+      ...prev,
+      ...fromServer(st),
+      ...(sub && { subscription: { cardLast4: sub.cardLast4 ?? prev.subscription.cardLast4, cancelled: sub.status === 'canceled', nextCharge: sub.nextCharge } }),
+    }));
   };
 
   const enqueue = (op: () => Promise<unknown>) => {
@@ -204,6 +214,16 @@ function useStoreValue() {
     acceptTerms: () => {
       patch({ termsAccepted: true });
       syncMe(() => api.post('/me/accept-terms'));
+    },
+    setCard: (cardLast4: string) => {
+      patch((p) => ({ subscription: { ...p.subscription, cardLast4, cancelled: false } }));
+      syncMe(() => api.put('/me/subscription', { cardLast4 }));
+    },
+    setSubscriptionCancelled: (cancelled: boolean) => {
+      const { cardLast4 } = ref.current.subscription;
+      patch((p) => ({ subscription: { ...p.subscription, cancelled } }));
+      // renewing = saving the card again (reactivates the subscription on the server)
+      syncMe(() => (cancelled ? api.del('/me/subscription') : api.put('/me/subscription', { cardLast4 })));
     },
 
     updateStage: (id: string, st: Partial<Stage>) => {
