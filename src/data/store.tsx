@@ -77,6 +77,8 @@ function load(): State {
       const saved = JSON.parse(raw) as Partial<State>;
       // a cached server project without a login token belongs to someone who logged out
       if (saved.remote && !getToken()) return initial;
+      // the deployed site has no local demo – drop what an old demo session left behind
+      if (import.meta.env.PROD && !getToken()) return initial;
       return { ...initial, ...saved };
     }
   } catch {

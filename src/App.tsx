@@ -1,4 +1,5 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { getToken } from '@/lib/api';
 import { AppLayout } from '@/components/layout';
 import { Interstitial, Otp, PhoneLogin, Profile, Splash } from '@/screens/onboarding/Auth';
 import { BudgetSplit, CheckResults, ProjectDetails, UploadDocs } from '@/screens/onboarding/Setup';
@@ -76,6 +77,11 @@ function ScreensIndex() {
   );
 }
 
+/** Project setup and the app need a verified login on the deployed site; the dev server keeps the local demo open. */
+function RequireLogin() {
+  return import.meta.env.DEV || getToken() ? <Outlet /> : <Navigate to="/" replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -87,6 +93,7 @@ export default function App() {
         <Route path="/login/phone" element={<PhoneLogin />} />
         <Route path="/login/otp" element={<Otp />} />
         <Route path="/login/verified" element={<Interstitial text="האימות בוצע בהצלחה!" next="/login/profile" bg="/img/bg-verified.png" />} />
+        <Route element={<RequireLogin />}>
         <Route path="/login/profile" element={<Profile />} />
 
         {/* Project setup */}
@@ -136,6 +143,7 @@ export default function App() {
         <Route path="/app/help" element={<Help />} />
         <Route path="/app/terms" element={<Terms />} />
         <Route path="/app/profile" element={<ProfileScreen />} />
+        </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

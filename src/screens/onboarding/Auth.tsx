@@ -12,6 +12,9 @@ import type { Role, User } from '@/data/types';
 import { pickImages } from '@/lib/files';
 import { cn } from '@/lib/format';
 
+/** Without the API, login falls back to the local demo – only on the dev server, never on the deployed site. */
+const demoLogin = (e: unknown) => import.meta.env.DEV && serverUnavailable(e);
+
 export function Logo({ size = 78 }: { size?: number }) {
   return (
     <div className="flex flex-col items-center gap-4">
@@ -81,8 +84,8 @@ export function PhoneLogin() {
             try {
               await auth.requestCode(local);
             } catch (e) {
-              // no server behind the app → continue as the local demo
-              if (!serverUnavailable(e)) return toast(errorText(e), 'info');
+              // no server behind the app → continue as the local demo (dev only)
+              if (!demoLogin(e)) return toast(errorText(e), 'info');
             } finally {
               setBusy(false);
             }
@@ -147,7 +150,7 @@ export function Otp() {
         </div>
         <div className="flex items-center justify-center gap-2 text-body">
           <span className="text-muted">לא קיבלת את הקוד?</span>
-          <button className="leading-4 tracking-[0.042px] underline" onClick={() => auth.requestCode(s.user.phone).then(() => setSent(true), (e) => (serverUnavailable(e) ? setSent(true) : toast(errorText(e), 'info')))}>
+          <button className="leading-4 tracking-[0.042px] underline" onClick={() => auth.requestCode(s.user.phone).then(() => setSent(true), (e) => (demoLogin(e) ? setSent(true) : toast(errorText(e), 'info')))}>
             {sent ? 'נשלח שוב ✓' : 'שלח קוד שוב'}
           </button>
         </div>
@@ -163,7 +166,7 @@ export function Otp() {
               // a returning user with a project goes straight home; new users continue to the profile and project setup
               if (!r.isNew && (await login(r.user as Partial<User>))) return nav('/app/home', { replace: true });
             } catch (e) {
-              if (!serverUnavailable(e)) {
+              if (!demoLogin(e)) {
                 setCode(Array(6).fill(''));
                 refs.current[0]?.focus();
                 return toast(errorText(e), 'info');
