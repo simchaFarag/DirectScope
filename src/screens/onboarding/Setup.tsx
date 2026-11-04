@@ -58,8 +58,8 @@ export function ProjectDetails() {
 /** הקמת פרויקט 2/4 (login-step 5) */
 export function UploadDocs() {
   const nav = useNavigate();
-  const { setQuotesCount } = useStore();
-  type Slot = { name: string; preview?: string } | undefined;
+  const { setQuotesCount, setSetupDocs } = useStore();
+  type Slot = { name: string; preview?: string; url?: string } | undefined;
   const [quotes, setQuotes] = useState<Slot[]>([undefined, undefined]);
   const [plans, setPlans] = useState<Slot[]>([undefined, undefined]);
   const put = (arr: Slot[], set: (a: Slot[]) => void, i: number, v: Slot) => set(arr.map((x, j) => (j === i ? v : x)));
@@ -100,6 +100,10 @@ export function UploadDocs() {
           disabled={!quotes.some(Boolean)}
           onClick={() => {
             setQuotesCount(quotes.filter(Boolean).length);
+            // kept in the project's documents once it's created
+            const docs = (title: string, list: Slot[]) =>
+              list.filter((f): f is NonNullable<Slot> => !!f).map((f, i) => ({ stageId: 'general', title: `${title} ${i + 1}`, fileName: f.name, preview: f.preview, fileUrl: f.url }));
+            setSetupDocs([...docs('הצעת מחיר קבלן', quotes), ...docs('תוכנית אדריכלית', plans)]);
             nav('/setup/checking');
           }}
         >

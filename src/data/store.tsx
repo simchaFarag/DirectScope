@@ -66,6 +66,26 @@ const initial: State = {
   subscription: { cardLast4: '1234', cancelled: false },
 };
 
+/** What a new customer starts from after a real login: the demo's stage template (no progress) and nothing else of it */
+const blank = (): State => ({
+  ...initial,
+  user: { ...initial.user, firstName: '', lastName: '', avatar: undefined },
+  project: { ...initial.project, name: '', description: '', address: '', estimatedBudget: undefined },
+  stages: initial.stages.map((st) => ({ ...st, paid: 0, memberAvatars: [], tasks: st.tasks.map((t) => ({ ...t, status: 'todo', note: undefined, photo: undefined })) })),
+  extras: [],
+  receipts: [],
+  shopping: [],
+  updates: [],
+  exceptions: [],
+  reminders: [],
+  docs: [],
+  gallery: [],
+  inspiration: initial.inspiration.map((i) => ({ ...i, image: undefined })),
+  contacts: [],
+  members: [],
+  quotesCount: 0,
+});
+
 const KEY = 'directscope.state.v3';
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -188,6 +208,8 @@ function useStoreValue() {
       for (const e of p.extras) await api.post(`${base}/extras`, clean(e));
       for (const i of p.inspiration) await api.post(`${base}/inspiration`, clean(i));
       for (const m of p.members) await api.post(`${base}/members`, clean(m));
+      // quotes / plans uploaded in setup step 2
+      for (const d of p.docs) await api.post(`${base}/documents`, clean({ ...d, id: undefined }));
       pid.current = created.id;
     });
 
@@ -198,6 +220,12 @@ function useStoreValue() {
       setS(initial);
     },
     login,
+    /** A verified login without a project: setup starts from empty fields instead of the demo data */
+    startFresh: (user: Partial<User>) => {
+      pid.current = undefined;
+      const b = blank();
+      setS({ ...b, user: { ...b.user, ...user } });
+    },
     finishOnboarding: () => {
       patch({ onboarded: true });
       if (getToken() && !pid.current) createRemoteProject();
@@ -213,6 +241,8 @@ function useStoreValue() {
       sync((b) => api.patch(b, clean(pr)));
     },
     setQuotesCount: (n: number) => patch({ quotesCount: n }),
+    /** setup step 2: the uploaded quotes / plans (sent with the project when it's created; going back replaces them) */
+    setSetupDocs: (docs: Omit<DocItem, 'id' | 'date'>[]) => patch({ docs: docs.map((d) => ({ ...d, id: uid(), date: today() })) }),
     acceptTerms: () => {
       patch({ termsAccepted: true });
       syncMe(() => api.post('/me/accept-terms'));
@@ -256,9 +286,14 @@ function useStoreValue() {
       }));
     },
     setTasks: (stageId: string, tasks: Task[]) => {
+      const named = (list: Task[]) => list.filter((t) => t.title.trim());
+      const prev = named(ref.current.stages.find((x) => x.id === stageId)?.tasks ?? []);
       mapStage(stageId, (x) => ({ ...x, tasks }));
+      // "הוסף משימה" adds an untitled row that is named on screen: the server only gets named tasks, and a change
+      // that touches nothing but untitled rows isn't sent at all (the reload after a sync would remove the row being typed)
+      if (JSON.stringify(named(tasks)) === JSON.stringify(prev)) return;
       // tasks created on this device have local ids – the server creates those and keeps the rest
-      sync((b) => api.put(`${b}/stages/${stageId}/tasks`, tasks.map((t) => clean({ ...t, note: t.note ?? null, photo: t.photo ?? null }))));
+      sync((b) => api.put(`${b}/stages/${stageId}/tasks`, named(tasks).map((t) => clean({ ...t, note: t.note ?? null, photo: t.photo ?? null }))));
     },
 
     addExtra: (e: Omit<ExtraExpense, 'id'>) => {

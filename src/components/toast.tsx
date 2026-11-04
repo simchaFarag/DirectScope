@@ -1,8 +1,11 @@
 import { CheckCircle2, Info } from 'lucide-react';
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 type Toast = { id: number; text: string; tone: 'success' | 'info' };
 const Ctx = createContext<(text: string, tone?: Toast['tone']) => void>(() => {});
+
+/** Shows a toast from code outside React components (e.g. src/lib/files.ts) */
+export const notify = (text: string, tone: Toast['tone'] = 'info') => window.dispatchEvent(new CustomEvent('ds:toast', { detail: { text, tone } }));
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -11,6 +14,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, text, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
   }, []);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { text, tone } = (e as CustomEvent<{ text: string; tone: Toast['tone'] }>).detail;
+      show(text, tone);
+    };
+    window.addEventListener('ds:toast', on);
+    return () => window.removeEventListener('ds:toast', on);
+  }, [show]);
   return (
     <Ctx.Provider value={show}>
       {children}

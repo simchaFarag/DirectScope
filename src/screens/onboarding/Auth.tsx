@@ -102,7 +102,7 @@ export function PhoneLogin() {
 /** login-step 2 */
 export function Otp() {
   const nav = useNavigate();
-  const { s, login } = useStore();
+  const { s, login, startFresh } = useStore();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string[]>(Array(6).fill(''));
@@ -163,8 +163,11 @@ export function Otp() {
             setBusy(true);
             try {
               const r = await auth.verify(s.user.phone, code.join(''));
+              const u = r.user as Partial<User>;
               // a returning user with a project goes straight home; new users continue to the profile and project setup
-              if (!r.isNew && (await login(r.user as Partial<User>))) return nav('/app/home', { replace: true });
+              if (!r.isNew && (await login(u))) return nav('/app/home', { replace: true });
+              // …with empty fields, not the demo's name, project and expenses
+              startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone: s.user.phone });
             } catch (e) {
               if (!demoLogin(e)) {
                 setCode(Array(6).fill(''));
