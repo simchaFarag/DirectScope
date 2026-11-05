@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter } from './routes/auth.js';
 import { meRouter } from './routes/me.js';
+import { invitesRouter } from './routes/members.js';
 import { projectsRouter } from './routes/projects.js';
 import { uploadsRouter } from './routes/uploads.js';
 
@@ -35,6 +36,7 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/me', meRouter);
+  app.use('/api/invites', invitesRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/uploads', uploadsRouter);
   app.use('/uploads', express.static(config.uploadDir, { maxAge: '30d', immutable: true, index: false }));

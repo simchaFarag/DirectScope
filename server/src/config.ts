@@ -37,6 +37,10 @@ if (env.NODE_ENV === 'production' && env.OTP_DEV_CODE) {
   console.error('OTP_DEV_CODE must be empty in production');
   process.exit(1);
 }
+if (env.NODE_ENV === 'production' && env.TRUST_PROXY === 0) {
+  // behind nginx every request comes from 127.0.0.1, so the per-IP login limit would be shared by all users
+  console.warn('WARNING: TRUST_PROXY=0 in production. Behind nginx set TRUST_PROXY=1, or all users share one login rate limit.');
+}
 if (env.SMS_PROVIDER === 'twilio' && !(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)) {
   console.error('SMS_PROVIDER=twilio requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM');
   process.exit(1);

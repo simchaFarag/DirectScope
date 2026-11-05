@@ -2,19 +2,28 @@ import { Icon } from '@/components/FigmaIcon';
 import { useNavigate } from 'react-router-dom';
 import { TabScreen } from '@/components/layout';
 import { Gauge, ProgressBar } from '@/components/ui';
-import { stageProgress, useStore, useTotals } from '@/data/store';
+import { stageProgress, usePerms, useStore, useTotals } from '@/data/store';
+import type { Stage } from '@/data/types';
 import { fmtDate, greeting, ils } from '@/lib/format';
 
 export function Home() {
   const nav = useNavigate();
   const { s } = useStore();
   const t = useTotals();
-  const isContractor = s.user.role === 'contractor';
-  const current = s.stages.find((st) => stageProgress(st) < 100) ?? s.stages[s.stages.length - 1];
+  const isContractor = !usePerms().seesBudget;
+  // may be undefined: a project can have no stages yet (this used to crash the whole screen)
+  const current: Stage | undefined = s.stages.find((st) => stageProgress(st) < 100) ?? s.stages[s.stages.length - 1];
   const doneStage = [...s.stages].reverse().find((st) => stageProgress(st) === 100);
   const pendingEx = s.exceptions.find((e) => e.status === 'pending');
-  const daily = s.updates.filter((u) => u.photo).slice(0, 5);
-  if (!daily.length) daily.push({ id: 'placeholder', stageId: current.id, author: '', authorTitle: '', time: 'היום', text: 'עוד אין עדכונים עם תמונה', status: 'approved', comments: [] });
+  // real photo updates only – a new project shows no daily card rather than a stock photo marked "today"
+  const daily = s.updates.filter((u) => u.photo && u.status === 'approved').slice(0, 5);
+  // the project's own latest files: documents (their preview) and gallery photos, newest first
+  const recent = [
+    ...s.docs.map((d) => ({ key: `d${d.id}`, date: d.date, src: d.preview ?? '/img/doc.png', to: `/app/doc/${d.id}`, label: d.title })),
+    ...s.gallery.filter((g) => g.image).map((g) => ({ key: `g${g.id}`, date: g.date, src: g.image!, to: '/app/archive/gallery', label: g.title })),
+  ]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
 
   return (
     <TabScreen home>
@@ -83,6 +92,7 @@ export function Home() {
           <div className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-6 overflow-x-auto px-6 lg:mx-0 lg:px-0">
             {daily.map((u) => {
               const st = s.stages.find((x) => x.id === u.stageId) ?? current;
+              if (!st) return null;
               return (
                 <button key={u.id} onClick={() => nav('/app/updates')} className="block w-full shrink-0 snap-center rounded-2xl bg-white text-right shadow-[0_0_5px_rgba(62,165,244,0.1)] lg:w-full">
                   <div className="relative flex aspect-[340/418] flex-col justify-between rounded-2xl bg-cover bg-center p-4" style={{ backgroundImage: `url(${u.photo ?? '/img/house.png'})` }}>
@@ -140,7 +150,8 @@ export function Home() {
           )}
         </div>
 
-        {/* Recent documents */}
+        {/* Recent documents – the project's own files (shown once there are any) */}
+        {recent.length > 0 && (
         <section className="flex flex-col gap-2.5 py-4 lg:col-start-2 lg:row-start-3 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)] xl:col-start-3">
           <div className="flex items-center justify-between">
             <span className="flex h-6 items-center rounded bg-bg px-2 text-caption">מסמכים אחרונים</span>
@@ -149,13 +160,14 @@ export function Home() {
             </button>
           </div>
           <div className="grid grid-cols-5 gap-2">
-            {['/img/doc.png', '/img/thumb1.png', '/img/thumb2.png', '/img/thumb3.png', '/img/doc.png'].map((src, i) => (
-              <button key={i} onClick={() => nav(i === 0 || i === 4 ? '/app/archive/docs' : '/app/archive/gallery')} className="block">
-                <img src={src} alt="" className="aspect-square w-full rounded-lg bg-white object-cover lg:border lg:border-primary-100" />
+            {recent.map((r) => (
+              <button key={r.key} onClick={() => nav(r.to)} className="block" aria-label={r.label}>
+                <img src={r.src} alt="" className="aspect-square w-full rounded-lg bg-white object-cover lg:border lg:border-primary-100" />
               </button>
             ))}
           </div>
         </section>
+        )}
         </div>
       </div>
     </TabScreen>

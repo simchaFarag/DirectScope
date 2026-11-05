@@ -49,6 +49,10 @@ updatesRouter.post('/updates', requireEdit, async (req, res) => {
     },
     include: withComments,
   });
+  // approved right away → its photos go to the gallery now, the same as /approve does for pending ones
+  if (update.status === 'approved' && body.photos.length) {
+    await prisma.galleryItem.createMany({ data: body.photos.map((image) => ({ projectId: a.project.id, title: 'עידכון יומי', date: today(), image })) });
+  }
   res.status(201).json(toUpdate(update, u.id));
 });
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { forbidden } from '../lib/errors.js';
 import { fileRef, parse } from '../lib/http.js';
 import { toSubscription, toUser } from '../lib/serialize.js';
 import { me, requireAuth } from '../middleware/auth.js';
@@ -26,7 +27,11 @@ meRouter.patch('/', async (req, res) => {
       .partial(),
     req.body,
   );
-  const user = await prisma.user.update({ where: { id: me(req).id }, data });
+  // The role is chosen once, while creating the profile. Letting it change later let a contractor switch to "client"
+  // and read the budget the client keeps from them.
+  const current = me(req);
+  if (data.role && data.role !== current.role && current.firstName) throw forbidden('לא ניתן לשנות את התפקיד אחרי ההרשמה');
+  const user = await prisma.user.update({ where: { id: current.id }, data });
   res.json(toUser(user));
 });
 
@@ -55,6 +60,9 @@ meRouter.put('/subscription', async (req, res) => {
 });
 
 meRouter.delete('/subscription', async (req, res) => {
+  // nothing to cancel – same answer as GET for a user without a subscription
+  const existing = await prisma.subscription.findUnique({ where: { userId: me(req).id } });
+  if (!existing) return res.json(null);
   const sub = await prisma.subscription.update({ where: { userId: me(req).id }, data: { status: 'canceled', nextCharge: null } });
   res.json(toSubscription(sub));
 });

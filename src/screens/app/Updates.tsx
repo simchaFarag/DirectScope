@@ -1,11 +1,11 @@
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { Icon } from '@/components/FigmaIcon';
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { Avatar, BottomActions, Button, ConfirmDialog, Lightbox, Modal, PhotoPicker, Select, TextArea } from '@/components/ui';
-import { useStore } from '@/data/store';
+import { usePerms, useStore } from '@/data/store';
 import type { Update } from '@/data/types';
 import { cn } from '@/lib/format';
 
@@ -43,7 +43,9 @@ export function UpdateCard({ u, compact }: { u: Update; compact?: boolean }) {
   const [thread, setThread] = useState(false);
   const [draft, setDraft] = useState('');
   const stage = s.stages.find((st) => st.id === u.stageId);
-  const canApprove = s.user.role === 'client' && u.status === 'pending';
+  // the server's rule: the owner and family/renovator editors approve; contractors, professionals and viewers don't
+  const perms = usePerms();
+  const canApprove = perms.canApprove && u.status === 'pending';
 
   const send = () => {
     if (!draft.trim()) return;
@@ -107,7 +109,7 @@ export function UpdateCard({ u, compact }: { u: Update; compact?: boolean }) {
         <XCircle size={16} /> נדחה{u.rejectReason ? `: ${u.rejectReason}` : ''}
       </span>
     ) : (
-      s.user.role !== 'client' && <span className="text-caption text-warn">ממתין לאישור</span>
+      !perms.canApprove && <span className="text-caption text-warn">ממתין לאישור</span>
     );
 
   return (
@@ -223,7 +225,10 @@ export function UpdateCard({ u, compact }: { u: Update; compact?: boolean }) {
 export function UpdatesScreen() {
   const nav = useNavigate();
   const { s } = useStore();
-  const [tab, setTab] = useState<'pending' | 'done'>('pending');
+  const { canApprove, canEdit } = usePerms();
+  // after posting your own (auto-approved) update you land on "טופלו", where it is
+  const [q] = useSearchParams();
+  const [tab, setTab] = useState<'pending' | 'done'>(q.get('tab') === 'done' ? 'done' : 'pending');
   const pending = s.updates.filter((u) => u.status === 'pending');
   const list = tab === 'pending' ? pending : s.updates.filter((u) => u.status !== 'pending');
   return (
@@ -234,13 +239,15 @@ export function UpdatesScreen() {
           <h1 className="font-display text-h1 font-bold tracking-[-0.28px]">עידכונים</h1>
           {pending.length > 0 && (
             <span className="flex h-6 items-center rounded bg-warn px-2 text-caption font-medium text-[#FEFAF5]">
-              {pending.length} {pending.length === 1 ? 'ממתין' : 'ממתינים'} {s.user.role === 'client' ? 'לאישורך' : 'לאישור'}
+              {pending.length} {pending.length === 1 ? 'ממתין' : 'ממתינים'} {canApprove ? 'לאישורך' : 'לאישור'}
             </span>
           )}
         </div>
-        <div className="flex justify-center">
-          <Button onClick={() => nav('/app/updates/new')}>הוספת עידכון</Button>
-        </div>
+        {canEdit && (
+          <div className="flex justify-center">
+            <Button onClick={() => nav('/app/updates/new', { state: { back: '/app/updates?tab=done' } })}>הוספת עידכון</Button>
+          </div>
+        )}
         <div className="flex rounded-full bg-primary-50 p-1 lg:mx-auto lg:max-w-md">
           {(['pending', 'done'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={cn('h-9 flex-1 rounded-full text-body', tab === t ? 'bg-white font-medium shadow-blue' : 'text-muted')}>
@@ -265,6 +272,8 @@ export function UpdateForm() {
   const toast = useToast();
   const [q] = useSearchParams();
   const { addUpdate } = useStore();
+  const { canApprove } = usePerms();
+  const back = (useLocation().state as { back?: string } | null)?.back;
   const options = useStageOptions();
   const [stage, setStage] = useState(q.get('stage') ?? undefined);
   const [text, setText] = useState('');
@@ -282,9 +291,11 @@ export function UpdateForm() {
           block
           disabled={!stage || !text}
           onClick={() => {
-            addUpdate(stage!, text, photos);
-            toast('העדכון נשלח');
-            nav(-1);
+            addUpdate(stage!, text, photos.slice(0, 6));
+            toast(canApprove ? 'העדכון פורסם' : 'העדכון נשלח לאישור');
+            // an approver's own update is published at once – show it under "טופלו" instead of an empty "ממתינים"
+            if (canApprove && back) nav(back, { replace: true });
+            else nav(-1);
           }}
         >
           שלח עידכון

@@ -66,12 +66,35 @@ const initial: State = {
   subscription: { cardLast4: '1234', cancelled: false },
 };
 
-/** What a new customer starts from after a real login: the demo's stage template (no progress) and nothing else of it */
-const blank = (): State => ({
+const DAY = 86_400_000;
+const shiftDate = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
+
+/**
+ * What a new customer starts from after a real login: the demo's stage template (no progress) and nothing else of it.
+ * The template's dates are moved so the project starts today – the demo's own dates started weeks ago.
+ */
+const blank = (): State => {
+  const days = Math.round((Date.parse(`${today()}T00:00:00Z`) - Date.parse(`${initial.project.startDate}T00:00:00Z`)) / DAY);
+  return {
   ...initial,
   user: { ...initial.user, firstName: '', lastName: '', avatar: undefined },
-  project: { ...initial.project, name: '', description: '', address: '', estimatedBudget: undefined },
-  stages: initial.stages.map((st) => ({ ...st, paid: 0, memberAvatars: [], tasks: st.tasks.map((t) => ({ ...t, status: 'todo', note: undefined, photo: undefined })) })),
+  project: {
+    ...initial.project,
+    name: '',
+    description: '',
+    address: '',
+    estimatedBudget: undefined,
+    startDate: shiftDate(initial.project.startDate, days),
+    endDate: shiftDate(initial.project.endDate, days),
+  },
+  stages: initial.stages.map((st) => ({
+    ...st,
+    paid: 0,
+    memberAvatars: [],
+    startDate: shiftDate(st.startDate, days),
+    endDate: shiftDate(st.endDate, days),
+    tasks: st.tasks.map((t) => ({ ...t, status: 'todo', note: undefined, photo: undefined })),
+  })),
   extras: [],
   receipts: [],
   shopping: [],
@@ -84,9 +107,31 @@ const blank = (): State => ({
   contacts: [],
   members: [],
   quotesCount: 0,
-});
+  };
+};
 
 const KEY = 'directscope.state.v3';
+/** the project this device opened last – reopened on the next login when the user is in several */
+const LAST_PROJECT = 'directscope.lastProject';
+/** token from an invite link (/invite?t=…), kept until the user logs in and it's accepted */
+export const INVITE_KEY = 'directscope.invite';
+const stored = {
+  get: (k: string) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  set: (k: string, v: string | null) => {
+    try {
+      if (v === null) localStorage.removeItem(k);
+      else localStorage.setItem(k, v);
+    } catch {
+      /* storage unavailable */
+    }
+  },
+};
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -164,15 +209,52 @@ function useStoreValue() {
     if (getToken()) enqueue(op);
   };
 
-  /** After OTP: takes the server user and opens their project if they have one. Returns whether a project was found. */
-  const login = async (user: Partial<User>) => {
+  /**
+   * After OTP: takes the server user and opens a project if they have one. Returns whether a project was found.
+   * With several projects: the one just joined (preferred), else the one this device opened last, else their own.
+   */
+  const login = async (user: Partial<User>, preferred?: string) => {
     patch((p) => ({ user: { ...p.user, ...user } }));
-    const projects = await api.get<{ id: string }[]>('/projects');
+    const projects = await api.get<{ id: string; isOwner?: boolean }[]>('/projects');
     if (!projects.length) return false;
-    pid.current = projects[0].id;
+    const last = stored.get(LAST_PROJECT);
+    const pick = projects.find((p) => p.id === preferred) ?? projects.find((p) => p.id === last) ?? projects.find((p) => p.isOwner) ?? projects[0];
+    pid.current = pick.id;
+    stored.set(LAST_PROJECT, pick.id);
     await refresh();
     return true;
   };
+
+  /** Accepts the invite link this device opened (if any). Returns the project joined. */
+  const acceptPendingInvite = async () => {
+    const token = stored.get(INVITE_KEY);
+    if (!token || !getToken()) return undefined;
+    try {
+      const r = await api.post<{ projectId: string }>('/invites/accept', { token });
+      stored.set(INVITE_KEY, null);
+      return r.projectId;
+    } catch (e) {
+      // offline: keep the link for the next try; anything else (used, other phone) won't get better
+      if (!serverUnavailable(e)) {
+        stored.set(INVITE_KEY, null);
+        toast(errorText(e), 'info');
+      }
+      return undefined;
+    }
+  };
+
+  // The browser can bring a page back from its back/forward cache with the state it had then (e.g. after saving a
+  // form that was reloaded). Re-read the saved copy so a later change doesn't write the old state back.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      const fresh = load();
+      pid.current = fresh.remote?.projectId;
+      setS(fresh);
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
 
   // returning user: reload the project from the server on start
   useEffect(() => {
@@ -204,22 +286,33 @@ function useStoreValue() {
         quotesCount: p.quotesCount,
         stages: p.stages.map((st) => ({ ...clean(st), paid: 0, tasks: st.tasks.map((t) => t.title) })),
       });
-      const base = `/projects/${created.id}`;
-      for (const e of p.extras) await api.post(`${base}/extras`, clean(e));
-      for (const i of p.inspiration) await api.post(`${base}/inspiration`, clean(i));
-      for (const m of p.members) await api.post(`${base}/members`, clean(m));
-      // quotes / plans uploaded in setup step 2
-      for (const d of p.docs) await api.post(`${base}/documents`, clean({ ...d, id: undefined }));
+      // the project exists from here on: point the app at it before the rest, so one item that fails can't leave the
+      // app working on a local copy while the project sits on the server without it
       pid.current = created.id;
+      stored.set(LAST_PROJECT, created.id);
+      const base = `/projects/${created.id}`;
+      const failed: unknown[] = [];
+      const each = async <T,>(items: T[], send: (x: T) => Promise<unknown>) => {
+        for (const x of items) await send(x).catch((e) => failed.push(e));
+      };
+      await each(p.extras, (e) => api.post(`${base}/extras`, clean(e)));
+      await each(p.inspiration, (i) => api.post(`${base}/inspiration`, clean(i)));
+      await each(p.members, (m) => api.post(`${base}/members`, clean({ ...m, id: undefined })));
+      // quotes / plans uploaded in setup step 2
+      await each(p.docs, (d) => api.post(`${base}/documents`, clean({ ...d, id: undefined })));
+      if (failed.length) toast(`${failed.length === 1 ? 'פריט אחד' : `${failed.length} פריטים`} לא נשמרו: ${errorText(failed[0])}`, 'info');
     });
 
   const actions = {
     reset: () => {
+      // end the session on the server too (the request reads the token before it's cleared below)
+      if (getToken()) api.post('/auth/logout').catch(() => {});
       auth.logout();
       pid.current = undefined;
       setS(initial);
     },
     login,
+    acceptPendingInvite,
     /** A verified login without a project: setup starts from empty fields instead of the demo data */
     startFresh: (user: Partial<User>) => {
       pid.current = undefined;
@@ -300,6 +393,10 @@ function useStoreValue() {
       patch((p) => ({ extras: [...p.extras, { ...e, id: uid() }] }));
       sync((b) => api.post(`${b}/extras`, clean(e)));
     },
+    updateExtra: (id: string, e: Omit<ExtraExpense, 'id'>) => {
+      patch((p) => ({ extras: p.extras.map((x) => (x.id === id ? { ...e, id } : x)) }));
+      sync((b) => api.patch(`${b}/extras/${id}`, clean({ ...e, tasks: e.tasks ?? null, duration: e.duration ?? null })));
+    },
     addReceipt: (r: Omit<Receipt, 'id'>) => {
       patch((p) => ({
         receipts: [{ ...r, id: uid() }, ...p.receipts],
@@ -339,7 +436,8 @@ function useStoreValue() {
             photo: photos[0],
             photos,
             date: today(),
-            status: 'pending',
+            // same rule as the server: an approver's own update is published right away
+            status: (p.remote?.access?.canApprove ?? p.user.role === 'client') ? 'approved' : 'pending',
             comments: [],
           },
           ...p.updates,
@@ -406,7 +504,8 @@ function useStoreValue() {
         const st = p.stages.find((x) => x.id === stageId);
         const task = st?.tasks.find((x) => x.id === taskId);
         if (!st || !task) return {};
-        const contractor = p.user.role === 'contractor';
+        // contractor view (server: restricted member) → the completion waits for the client's approval
+        const contractor = !(p.remote?.access?.seesBudget ?? p.user.role !== 'contractor');
         const documented = contractor || note || photo;
         return {
           stages: p.stages.map((x) => (x.id === stageId ? { ...x, tasks: x.tasks.map((k) => (k.id === taskId ? { ...k, status: 'done', note, photo } : k)) } : x)),
@@ -428,7 +527,8 @@ function useStoreValue() {
                 ...p.updates,
               ]
             : p.updates,
-          gallery: photo ? [{ id: uid(), title: task.title, date: today(), image: photo }, ...p.gallery] : p.gallery,
+          // a pending completion's photo joins the gallery once approved
+          gallery: photo && !contractor ? [{ id: uid(), title: task.title, date: today(), image: photo }, ...p.gallery] : p.gallery,
         };
       });
     },
@@ -482,6 +582,18 @@ export function useStore() {
   const v = useContext(Ctx);
   if (!v) throw new Error('useStore outside provider');
   return v;
+}
+
+/**
+ * What the current user may do in the open project. Logged in: the server's answer (it enforces the same rules).
+ * Local demo / setup before the project exists: from the role picked in the profile.
+ * seesBudget=false is the contractor view: contract amounts only, no money edits, no approvals.
+ */
+export function usePerms(): Access {
+  const { s } = useStore();
+  if (s.remote?.access) return s.remote.access;
+  const contractor = s.user.role === 'contractor';
+  return { isOwner: !contractor, canEdit: true, canApprove: !contractor, seesBudget: !contractor };
 }
 
 /** Derived numbers used by Home / Budget / Schedule */

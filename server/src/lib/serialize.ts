@@ -153,14 +153,16 @@ export const toGallery = (g: GalleryItem) => ({ id: g.id, title: g.title, date: 
 export const toInspiration = (i: Inspiration) => ({ id: i.id, title: i.title, image: i.image ?? undefined });
 export const toContact = (c: Contact) => ({ id: c.id, name: c.name, title: c.title, phone: c.phone, avatar: c.avatar ?? undefined });
 
-export const toMember = (m: Member) => ({
+/** Phone numbers and the invite link are for the project owner only; other members see names and roles. */
+export const toMember = (m: Member, full = true) => ({
   id: m.id,
   name: m.name,
-  phone: localPhone(m.phone),
+  phone: full ? localPhone(m.phone) : '',
   role: m.role,
   permission: m.permission,
   avatar: m.avatar ?? undefined,
   joined: !!m.userId,
+  inviteToken: full ? (m.inviteToken ?? undefined) : undefined,
 });
 
 export const toSubscription = (s: Subscription) => ({

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { crud } from '../lib/crud.js';
 import { notFound } from '../lib/errors.js';
-import { assertStage, dateIn, fileRef, parse, today, param } from '../lib/http.js';
+import { assertStage, dateIn, fileRef, money, parse, today, param } from '../lib/http.js';
 import { toExtra, toReceipt, toShopping } from '../lib/serialize.js';
 import { access, requireBudget, requireEdit } from '../middleware/project.js';
 
@@ -16,7 +16,7 @@ crud(budgetRouter, '/extras', {
   input: z.object({
     kind: z.enum(['architect', 'designer', 'surveyor', 'fee', 'other']),
     title: z.string().trim().min(1).max(120),
-    amount: z.number().int().nonnegative(),
+    amount: money,
     tasks: z.number().int().nonnegative().nullish(),
     duration: z.string().max(60).nullish(),
   }),
@@ -39,7 +39,7 @@ crud(budgetRouter, '/shopping', {
 const receiptInput = z.object({
   stageId: z.string(),
   title: z.string().trim().min(1).max(255),
-  amount: z.number().int().positive(),
+  amount: money.positive('הסכום חייב להיות גדול מ-0'),
   date: dateIn.optional(),
   fileUrl: fileRef.nullish(),
   preview: fileRef.nullish(),

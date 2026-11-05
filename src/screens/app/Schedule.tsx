@@ -5,7 +5,7 @@ import { StageTabs, SubScreen, TabScreen, Heading } from '@/components/layout';
 import { Icon } from '@/components/FigmaIcon';
 import { AvatarStack, VDivider, BottomActions, Button, IconButton, Modal, PhotoSourceButtons, ProgressBar, Ring, SectionTitle, TextArea, UploadSlot } from '@/components/ui';
 import { useToast } from '@/components/toast';
-import { stageProgress, useStore, useTotals, type State } from '@/data/store';
+import { stageProgress, usePerms, useStore, useTotals, type State } from '@/data/store';
 import type { StageIcon, Task } from '@/data/types';
 import { cn, fmtDate, ils, stageLabel } from '@/lib/format';
 import { pickImages } from '@/lib/files';
@@ -47,6 +47,7 @@ export function Hero({ children, variant = 'house' }: { children: React.ReactNod
 export function Schedule() {
   const nav = useNavigate();
   const { s } = useStore();
+  const perms = usePerms();
   const t = useTotals();
   return (
     <TabScreen white>
@@ -68,9 +69,11 @@ export function Schedule() {
               <Icon name="date" className="text-primary" />
               <h3 className="flex-1 text-lg font-semibold leading-5">תאריכים</h3>
             </div>
-            <button className="grid h-6 w-6 place-items-center rounded-full bg-primary-50" aria-label="עריכת תאריכים" onClick={() => nav('/app/project/edit')}>
-              <Icon name="sEdit" />
-            </button>
+            {perms.canEdit && (
+              <button className="grid h-6 w-6 place-items-center rounded-full bg-primary-50" aria-label="עריכת תאריכים" onClick={() => nav('/app/project/edit')}>
+                <Icon name="sEdit" />
+              </button>
+            )}
           </div>
           <div className="flex items-start gap-4 whitespace-nowrap text-center text-body">
             <div className="flex flex-col gap-1.5">
@@ -90,9 +93,12 @@ export function Schedule() {
           </div>
         </section>
 
-        <Button variant="outline" onClick={() => nav('/app/stage/new')}>
-          הוספת שלב
-        </Button>
+        {/* a new stage changes the client's budget – not for contractors (the server refuses it too) */}
+        {perms.canEdit && perms.seesBudget && (
+          <Button variant="outline" onClick={() => nav('/app/stage/new')}>
+            הוספת שלב
+          </Button>
+        )}
 
         <div className="w-full space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
         {s.stages.map((st) => (
@@ -124,6 +130,7 @@ export function StageSchedule() {
   const nav = useNavigate();
   const { stageId = '' } = useParams();
   const { s } = useStore();
+  const perms = usePerms();
   const [openNote, setOpenNote] = useState<string>();
   const [completing, setCompleting] = useState<Task>();
 
@@ -163,18 +170,22 @@ export function StageSchedule() {
               </div>
             </div>
           </div>
-          <Button variant="outline" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
-            עריכת שלב
-          </Button>
+          {perms.canEdit && (
+            <Button variant="outline" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
+              עריכת שלב
+            </Button>
+          )}
         </section>
 
         <section className="flex flex-col gap-4">
           <SectionHead title="משימות">
-            <SmallIconButton onClick={() => nav(`/app/schedule/${st.id}/tasks`)} aria-label="עריכת משימות">
-              <Icon name="edit" size={18} />
-            </SmallIconButton>
+            {perms.canEdit && (
+              <SmallIconButton onClick={() => nav(`/app/schedule/${st.id}/tasks`)} aria-label="עריכת משימות">
+                <Icon name="edit" size={18} />
+              </SmallIconButton>
+            )}
           </SectionHead>
-          <TaskTimeline tasks={st.tasks} onTask={setCompleting} />
+          <TaskTimeline tasks={st.tasks} onTask={perms.canEdit ? setCompleting : undefined} />
           <TaskCompleteModal stageId={st.id} task={completing} onClose={() => setCompleting(undefined)} />
         </section>
 
@@ -195,9 +206,11 @@ export function StageSchedule() {
 
         <section className="flex flex-col gap-4">
           <SectionHead title="תזכורות">
-            <SmallIconButton onClick={() => nav(`/app/reminder/new?stage=${st.id}`)} aria-label="הוספת תזכורת">
-              <Icon name="addThin" />
-            </SmallIconButton>
+            {perms.canEdit && (
+              <SmallIconButton onClick={() => nav(`/app/reminder/new?stage=${st.id}`)} aria-label="הוספת תזכורת">
+                <Icon name="addThin" />
+              </SmallIconButton>
+            )}
           </SectionHead>
           <div className="no-scrollbar -mx-6 flex items-start gap-4 overflow-x-auto px-6 pb-2 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
             {reminders.map((r) => {
@@ -293,11 +306,11 @@ export function TaskTimeline({ tasks, onTask }: { tasks: Task[]; onTask?: (t: Ta
 /* ---------- השלמת משימה + תיעוד ---------- */
 
 export function TaskCompleteModal({ stageId, task, onClose }: { stageId: string; task?: Task; onClose: () => void }) {
-  const { s, completeTask } = useStore();
+  const { completeTask } = useStore();
   const toast = useToast();
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
-  const contractor = s.user.role === 'contractor';
+  const contractor = !usePerms().seesBudget;
   const close = () => {
     setNote('');
     setPhoto(undefined);
@@ -338,6 +351,8 @@ export function TasksEdit() {
   const st = s.stages.find((x) => x.id === stageId);
   const [editing, setEditing] = useState<string>();
   const [completing, setCompleting] = useState<Task>();
+  // a contractor's task status changes only by completing it (→ an update the client approves); the server enforces it
+  const statusLocked = !usePerms().seesBudget;
   if (!st) return null;
   const tasks = st.tasks;
   const set = (next: Task[]) => setTasks(st.id, next);
@@ -377,7 +392,7 @@ export function TasksEdit() {
                     )}
                   >
                     <button
-                      onClick={() => (t.status === 'done' ? set(tasks.map((x) => (x.id === t.id ? { ...x, status: 'todo' } : x))) : setCompleting(t))}
+                      onClick={() => (t.status !== 'done' ? setCompleting(t) : !statusLocked && set(tasks.map((x) => (x.id === t.id ? { ...x, status: 'todo' } : x))))}
                       className="grid h-6 w-6 shrink-0 place-items-center"
                       aria-label={t.status === 'done' ? 'החזרה לביצוע' : 'סימון כבוצע'}
                     >
@@ -395,7 +410,7 @@ export function TasksEdit() {
                         className="min-w-0 flex-1 bg-transparent text-body focus:outline-none"
                       />
                     ) : (
-                      <button onClick={() => cycle(t)} className={cn('min-w-0 flex-1 text-right text-body', t.status === 'done' && 'text-muted')}>
+                      <button onClick={() => !statusLocked && cycle(t)} className={cn('min-w-0 flex-1 text-right text-body', t.status === 'done' && 'text-muted')}>
                         {t.title}
                         {t.note && <span className="block text-caption text-muted">{t.note}</span>}
                       </button>
@@ -452,25 +467,36 @@ export function TasksEdit() {
 export function ExtrasTab({ base }: { base: string }) {
   const nav = useNavigate();
   const { s } = useStore();
+  const perms = usePerms();
   return (
     <TabScreen>
       <StageTabs items={stageTabs(s)} active="extras" onSelect={(id) => nav(id === 'general' ? base : `${base}/${id}`)} />
       <div className="animate-fade-up space-y-3 px-6 pt-4 lg:mx-auto lg:max-w-2xl">
         <SectionTitle
           action={
-            <IconButton onClick={() => nav('/app/expense/new')} aria-label="הוספת הוצאה">
-              <Plus size={18} />
-            </IconButton>
+            perms.canEdit && perms.seesBudget ? (
+              <IconButton onClick={() => nav('/app/expense/new')} aria-label="הוספת הוצאה">
+                <Plus size={18} />
+              </IconButton>
+            ) : undefined
           }
         >
           הוצאות נוספות
         </SectionTitle>
-        {s.extras.map((e) => (
-          <div key={e.id} className="card flex items-center justify-between p-4">
-            <span className="text-lg font-medium">{e.title}</span>
-            <span className="font-semibold">{ils(e.amount)}</span>
-          </div>
-        ))}
+        {s.extras.map((e) =>
+          perms.canEdit && perms.seesBudget ? (
+            // tapping opens the same form as "הוספת הוצאה", filled in – no extra controls on the card
+            <button key={e.id} onClick={() => nav(`/app/expense/${e.id}`)} className="card flex w-full items-center justify-between p-4 text-right" aria-label={`עריכת ${e.title}`}>
+              <span className="text-lg font-medium">{e.title}</span>
+              <span className="font-semibold">{ils(e.amount)}</span>
+            </button>
+          ) : (
+            <div key={e.id} className="card flex items-center justify-between p-4">
+              <span className="text-lg font-medium">{e.title}</span>
+              <span className="font-semibold">{ils(e.amount)}</span>
+            </div>
+          ),
+        )}
       </div>
     </TabScreen>
   );

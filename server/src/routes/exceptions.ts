@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { notFound } from '../lib/errors.js';
-import { assertStage, fileRef, parse, param } from '../lib/http.js';
+import { assertStage, fileRef, money, parse, param } from '../lib/http.js';
 import { roleTitle, toException } from '../lib/serialize.js';
 import { me } from '../middleware/auth.js';
 import { access, requireApprove, requireEdit } from '../middleware/project.js';
@@ -23,7 +23,7 @@ exceptionsRouter.post('/exceptions', requireEdit, async (req, res) => {
       stageId: z.string(),
       title: z.string().trim().min(1).max(255),
       description: z.string().max(5000).default(''),
-      amount: z.number().int().nonnegative(),
+      amount: money,
       photos: z.array(fileRef).max(6).default([]),
     }),
     req.body,

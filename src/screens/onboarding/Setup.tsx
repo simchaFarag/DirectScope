@@ -37,14 +37,14 @@ export function ProjectDetails() {
           <Field aria-label="תיאור נוסף" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="תיאור נוסף (לא חובה)" />
         </div>
         <Field aria-label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת הנכס" />
-        <ClearField value={budget && ils(+budget)} onChange={(v) => setBudget(v.replace(/\D/g, ''))} placeholder="תקציב משוער (לא חובה)" />
+        <ClearField value={budget && ils(+budget)} onChange={(v) => setBudget(v.replace(/\D/g, '').slice(0, 9))} placeholder="תקציב משוער (לא חובה)" />
       </div>
       <BottomActions>
         <Button
           block
-          disabled={!name || !address}
+          disabled={!name.trim() || !address.trim()}
           onClick={() => {
-            setProject({ name, type, description: desc, address, estimatedBudget: budget ? +budget : undefined });
+            setProject({ name: name.trim(), type, description: desc.trim(), address: address.trim(), estimatedBudget: budget ? +budget : undefined });
             nav('/setup/docs');
           }}
         >
@@ -319,7 +319,8 @@ export function BudgetSplit() {
             />
           ))}
           {s.extras.map((e) => (
-            <SplitCard key={e.id} icon={<Icon name="addBudget" />} label="הוצאות נוספות" title={e.title} budget={e.amount} tasks={e.tasks ?? 0} duration={e.duration ?? '0'}/>
+            /* Figma "login-step 7": the extra-expense card has the same edit pencil as the stages */
+            <SplitCard key={e.id} icon={<Icon name="addBudget" />} label="הוצאות נוספות" title={e.title} budget={e.amount} tasks={e.tasks ?? 0} duration={e.duration ?? '0'} onEdit={() => nav(`/setup/expense/${e.id}`)} />
           ))}
           <SplitCard soft icon={<General />} title="סיכום כללי" budget={total} tasks={tasks} duration={`${Math.ceil(s.stages.length * 1.5)} שבועות`} />
         </div>

@@ -46,16 +46,33 @@ export function imageToDataUrl(file: File, max = 900, quality = 0.72): Promise<s
 async function tryUpload(files: File[]) {
   if (!getToken() || !files.length) return undefined;
   try {
-    return (await api.upload(files)).map((f) => f.url);
+    // the server takes up to 6 files per request
+    const urls: string[] = [];
+    for (let i = 0; i < files.length; i += 6) urls.push(...(await api.upload(files.slice(i, i + 6))).map((f) => f.url));
+    return urls;
   } catch (e) {
     notify(e instanceof ApiError && e.code ? e.message : 'ההעלאה נכשלה, בדקו את החיבור ונסו שוב');
     return null;
   }
 }
 
-export async function pickImages(opts: { multiple?: boolean; capture?: boolean } = {}) {
-  const files = await pickFiles({ accept: 'image/*', ...opts });
-  const local = await Promise.all(files.map((f) => imageToDataUrl(f)));
+/** Same limit as the server (MAX_UPLOAD_MB) – checked here so a big file isn't uploaded only to be refused. */
+const MAX_BYTES = 15 * 1024 * 1024;
+
+/**
+ * Picks photos, downscales them and uploads them when logged in. `max` caps how many are kept (e.g. 6 per update):
+ * extra ones are dropped before uploading, with a message. Files that aren't readable images are skipped with a message.
+ */
+export async function pickImages(opts: { multiple?: boolean; capture?: boolean; max?: number } = {}) {
+  let files = await pickFiles({ accept: 'image/*', ...opts });
+  if (opts.max !== undefined && files.length > opts.max) {
+    notify(`אפשר להוסיף עד ${opts.max} תמונות – נוספו הראשונות`);
+    files = files.slice(0, Math.max(0, opts.max));
+  }
+  const read = await Promise.all(files.map((f) => imageToDataUrl(f).catch(() => null)));
+  const local = read.filter((d): d is string => !!d);
+  if (local.length < read.length) notify(read.length === 1 ? 'לא ניתן לקרוא את התמונה. בחרו קובץ תמונה אחר' : 'חלק מהקבצים אינם תמונות תקינות ולא נוספו');
+  if (!local.length) return [];
   const urls = await tryUpload(await Promise.all(local.map((d, i) => dataUrlToFile(d, `image-${i + 1}.jpg`))));
   return urls === null ? [] : (urls ?? local);
 }
@@ -64,6 +81,10 @@ export async function pickImages(opts: { multiple?: boolean; capture?: boolean }
 export async function pickDocument() {
   const [file] = await pickFiles({ accept: '.pdf,.doc,.docx,image/*' });
   if (!file) return undefined;
+  if (file.size > MAX_BYTES) {
+    notify('הקובץ גדול מדי – עד 15MB');
+    return undefined;
+  }
   const isImage = file.type.startsWith('image/');
   const uploaded = await tryUpload([file]);
   if (uploaded === null) return undefined;

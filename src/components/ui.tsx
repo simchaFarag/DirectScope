@@ -269,8 +269,8 @@ export function UploadSlot({ filled, onAdd, onRemove, className, label }: { fill
 }
 
 /** Camera / gallery chooser used wherever photos are added (designer note: "גלריה או לצלם") */
-export function PhotoSourceButtons({ onPick, multiple }: { onPick: (imgs: string[]) => void; multiple?: boolean }) {
-  const pick = (capture: boolean) => pickImages({ multiple: multiple && !capture, capture }).then((imgs) => imgs.length && onPick(imgs));
+export function PhotoSourceButtons({ onPick, multiple, max }: { onPick: (imgs: string[]) => void; multiple?: boolean; max?: number }) {
+  const pick = (capture: boolean) => pickImages({ multiple: multiple && !capture, capture, max }).then((imgs) => imgs.length && onPick(imgs));
   return (
     <div className="flex gap-2">
       <button type="button" onClick={() => pick(true)} className="flex h-8 items-center gap-1.5 rounded-full border border-primary-200 bg-white px-3 text-caption">
@@ -289,13 +289,14 @@ export function PhotoPicker({ photos, onChange, max = 6 }: { photos: string[]; o
     <div>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-body text-ink">תמונות</span>
-        {photos.length < max && <PhotoSourceButtons onPick={add} multiple />}
+        {/* only the free slots are picked and uploaded (choosing 7 used to fail the whole upload) */}
+        {photos.length < max && <PhotoSourceButtons onPick={add} multiple max={max - photos.length} />}
       </div>
       <div className="grid grid-cols-2 gap-x-[18px] gap-y-2">
         {photos.map((p, i) => (
           <UploadSlot key={i} filled={p} onAdd={() => {}} onRemove={() => onChange(photos.filter((_, j) => j !== i))} />
         ))}
-        {photos.length < max && <UploadSlot onAdd={() => pickImages({ multiple: true }).then(add)} label="הוסף תמונה" />}
+        {photos.length < max && <UploadSlot onAdd={() => pickImages({ multiple: true, max: max - photos.length }).then(add)} label="הוסף תמונה" />}
       </div>
       <p className="mt-2 text-caption text-muted">ניתן להוסיף עד {max} תמונות</p>
     </div>

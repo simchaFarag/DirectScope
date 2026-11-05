@@ -88,6 +88,8 @@ model User {
   role            Role      @default(client)
   avatar          String?   @db.VarChar(500)
   termsAcceptedAt DateTime?
+  /// bumped on logout – tokens signed with an older version stop working
+  tokenVersion    Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -145,17 +147,19 @@ model Project {
   @@index([ownerId])
 }
 
-/// A person invited to the project. userId is linked automatically when someone logs in with that phone.
+/// A person invited to the project. userId is linked when the invitee opens their invite link (inviteToken) and logs in
+/// with the invited phone. Rows without a token predate invite links and are still linked on login by phone.
 model Member {
-  id         String     @id @default(cuid())
-  projectId  String
-  userId     String?
-  name       String     @db.VarChar(120)
-  phone      String     @db.VarChar(20)
-  role       MemberRole @default(professional)
-  permission Permission @default(view)
-  avatar     String?    @db.VarChar(500)
-  createdAt  DateTime   @default(now())
+  id          String     @id @default(cuid())
+  projectId   String
+  userId      String?
+  name        String     @db.VarChar(120)
+  phone       String     @db.VarChar(20)
+  role        MemberRole @default(professional)
+  permission  Permission @default(view)
+  avatar      String?    @db.VarChar(500)
+  inviteToken String?    @unique @db.VarChar(64)
+  createdAt   DateTime   @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)

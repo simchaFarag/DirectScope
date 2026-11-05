@@ -12,9 +12,15 @@ export interface Access {
   canEdit: boolean;
   /** may approve / reject updates and exceptions */
   canApprove: boolean;
-  /** contractors see only the contract amount (SPEC §2) */
+  /**
+   * contractors see only the contract amount (SPEC §2). False for "restricted" members: anyone the owner invited as
+   * "בעל מקצוע", and anyone registered as a contractor. Restricted members also can't touch money fields or approve.
+   */
   seesBudget: boolean;
 }
+
+/** Projects the user owns or has joined (a linked membership – a phone number alone grants nothing). */
+export const visibleTo = (userId: string) => ({ OR: [{ ownerId: userId }, { members: { some: { userId } } }] });
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -36,17 +42,21 @@ export async function loadProject(req: Request, _res: Response, next: NextFuncti
     return next();
   }
 
-  const member = await prisma.member.findFirst({ where: { projectId: project.id, OR: [{ userId: user.id }, { phone: user.phone }] } });
+  // Only a membership the invitee accepted (userId set) counts. Matching the phone alone let anyone pull a user into a
+  // project without their consent.
+  const member = await prisma.member.findFirst({ where: { projectId: project.id, userId: user.id } });
   if (!member) throw notFound('הפרויקט לא נמצא');
 
   const canEdit = member.permission === 'edit';
-  const contractor = user.role === 'contractor';
+  // Decided by what the owner chose when inviting ("בעל מקצוע") plus the role locked at signup – never by a value the
+  // member can change on their own.
+  const restricted = member.role === 'professional' || user.role === 'contractor';
   req.access = {
     project,
     isOwner: false,
     canEdit,
-    canApprove: canEdit && !contractor && member.role !== 'professional',
-    seesBudget: !contractor,
+    canApprove: canEdit && !restricted,
+    seesBudget: !restricted,
   };
   next();
 }

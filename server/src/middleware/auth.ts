@@ -20,7 +20,8 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   if (!payload) throw unauthorized();
 
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user) throw unauthorized();
+  // logged out since this token was issued
+  if (!user || user.tokenVersion !== payload.ver) throw unauthorized();
   req.user = user;
   next();
 }

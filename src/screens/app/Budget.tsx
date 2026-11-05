@@ -6,9 +6,9 @@ import { Icon } from '@/components/FigmaIcon';
 import { Avatar, BottomActions, Button, Checkbox, ConfirmDialog, Field, Lightbox, Modal, PhotoPicker, ProgressBar, Select, TextArea, UploadSlot } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { pickDocument, pickImages } from '@/lib/files';
-import { stageExceptions, useStore, useTotals } from '@/data/store';
+import { stageExceptions, usePerms, useStore, useTotals } from '@/data/store';
 import type { ExceptionReq } from '@/data/types';
-import { cn, fmtDate, ils, stageLabel } from '@/lib/format';
+import { cn, fmtDate, ils, stageLabel, thousands } from '@/lib/format';
 import { ExtrasTab, Hero, SectionHead, SmallIconButton, stageTabs } from './Schedule';
 import { useStageOptions } from './Updates';
 
@@ -53,7 +53,8 @@ export function Budget() {
   const nav = useNavigate();
   const { s } = useStore();
   const t = useTotals();
-  const contractor = s.user.role === 'contractor';
+  const { seesBudget, canEdit } = usePerms();
+  const contractor = !seesBudget;
   const contract = s.stages.reduce((a, st) => a + st.contractAmount, 0);
 
   return (
@@ -83,7 +84,7 @@ export function Budget() {
             </div>
             <div className="relative flex flex-col items-center gap-1.5 text-center">
               <div className="font-display font-bold">
-                <p className="text-xl1">{Math.round(t.paid / 1000)}</p>
+                <p className="text-xl1">{thousands(t.paid)}</p>
                 <p className="text-h3">אלף ש״ח</p>
               </div>
               <p className="text-lg">שולמו עד כה</p>
@@ -93,7 +94,7 @@ export function Budget() {
       </Hero>
 
       <div className="animate-fade-up relative -mt-6 flex flex-col items-center gap-6 px-6">
-        {!contractor && (
+        {!contractor && canEdit && (
           <Button variant="outline" onClick={() => nav('/app/expense/new')}>
             הוספת הוצאה
           </Button>
@@ -147,11 +148,13 @@ export function StageBudget() {
   const [editing, setEditing] = useState<string>();
   const [shopPhoto, setShopPhoto] = useState<string>();
   const [adding, setAdding] = useState(false);
+  const perms = usePerms();
 
   if (stageId === 'extras') return <ExtrasTab base="/app/budget" />;
   const st = s.stages.find((x) => x.id === stageId);
   if (!st) return null;
-  const contractor = s.user.role === 'contractor';
+  const contractor = !perms.seesBudget;
+  const { canEdit } = perms;
   const ex = stageExceptions(s, st.id);
   const total = (contractor ? st.contractAmount : st.budget) + ex;
   const shopping = s.shopping.filter((x) => x.stageId === st.id);
@@ -170,7 +173,7 @@ export function StageBudget() {
               <p className="text-body text-muted">שולמו עד כה</p>
             </div>
             <div className="flex w-full flex-col items-start">
-              <span className="flex h-4 items-center rounded-lg bg-accent px-2 text-caption text-white">{Math.round((total - st.paid) / 1000)} אש״ח</span>
+              <span className="flex h-4 items-center rounded-lg bg-accent px-2 text-caption text-white">{thousands(total - st.paid)} אש״ח</span>
               <ProgressBar value={total ? (st.paid / total) * 100 : 0} color="bg-primary" className="bg-bg" />
             </div>
             <dl className="w-[278px] text-body">
@@ -180,7 +183,7 @@ export function StageBudget() {
               <Line k="סכום חוזה קבלן:" v={ils(st.contractAmount)} last />
             </dl>
           </div>
-          {!contractor && (
+          {!contractor && canEdit && (
             <Button variant="outline" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
               עריכת שלב
             </Button>
@@ -189,14 +192,16 @@ export function StageBudget() {
 
         <section className="flex flex-col gap-4">
           <SectionHead title="רשימת קניות">
-            <SmallIconButton onClick={() => setAdding(true)} aria-label="הוספת פריט">
-              <Icon name="addThin" />
-            </SmallIconButton>
+            {canEdit && (
+              <SmallIconButton onClick={() => setAdding(true)} aria-label="הוספת פריט">
+                <Icon name="addThin" />
+              </SmallIconButton>
+            )}
           </SectionHead>
           <div className="space-y-4">
             {shopping.map((it) => (
               <div key={it.id} className={cn('flex items-center rounded-lg px-4 py-2', it.done ? 'gap-4 bg-line' : 'gap-2 bg-bg')}>
-                <Checkbox checked={it.done} onChange={() => toggleShopping(it.id)} />
+                <Checkbox checked={it.done} onChange={() => canEdit && toggleShopping(it.id)} />
                 {editing === it.id ? (
                   <input
                     autoFocus
@@ -217,7 +222,7 @@ export function StageBudget() {
                     <img src={it.photo} alt="" className="h-7 w-7 rounded object-cover" />
                   </button>
                 )}
-                <span className="flex items-start gap-2">
+                {canEdit && <span className="flex items-start gap-2">
                   <button className="grid h-6 w-6 place-items-center" onClick={() => pickImages({ capture: true }).then(([p]) => p && updateShopping(it.id, { photo: p }))} aria-label="צילום פריט">
                     <Icon name="camera" size={16} />
                   </button>
@@ -227,7 +232,7 @@ export function StageBudget() {
                   <button className="grid h-6 w-6 place-items-center" onClick={() => removeShopping(it.id)} aria-label="מחיקה">
                     <Icon name="delete" size={16} />
                   </button>
-                </span>
+                </span>}
               </div>
             ))}
             {adding && (
@@ -265,9 +270,11 @@ export function StageBudget() {
         {!contractor && (
           <section className="flex flex-col gap-4">
             <SectionHead title="פירוט הוצאות">
-              <SmallIconButton onClick={() => nav(`/app/receipt/new?stage=${st.id}`)} aria-label="הוספת אסמכתא">
-                <Icon name="addThin" />
-              </SmallIconButton>
+              {canEdit && (
+                <SmallIconButton onClick={() => nav(`/app/receipt/new?stage=${st.id}`)} aria-label="הוספת אסמכתא">
+                  <Icon name="addThin" />
+                </SmallIconButton>
+              )}
             </SectionHead>
             <div className="space-y-2">
               {receipts.map((r) => (
@@ -316,7 +323,7 @@ export function ExceptionCard({ e, white }: { e: ExceptionReq; white?: boolean }
   const [confirm, setConfirm] = useState(false);
   const [photo, setPhoto] = useState<number | null>(null);
   const stage = s.stages.find((x) => x.id === e.stageId);
-  const client = s.user.role === 'client';
+  const client = usePerms().canApprove;
   return (
     <>
       {/* Figma "Exception card" (pending): yellow outline, avatar + byline + stage chip, title, amount, approve / view */}
@@ -427,7 +434,8 @@ export function ExceptionCard({ e, white }: { e: ExceptionReq; white?: boolean }
 export function ExceptionsScreen() {
   const nav = useNavigate();
   const { s } = useStore();
-  const contractor = s.user.role === 'contractor';
+  const { seesBudget, canEdit } = usePerms();
+  const contractor = !seesBudget;
   const pending = s.exceptions.filter((e) => e.status === 'pending').length;
   return (
     <>
@@ -442,7 +450,7 @@ export function ExceptionsScreen() {
             </span>
           )}
         </div>
-        {contractor && (
+        {contractor && canEdit && (
           <div className="flex justify-center">
             <Button onClick={() => nav('/app/exceptions/new')}>שליחת אישור חדש</Button>
           </div>
@@ -477,13 +485,13 @@ export function ExceptionForm() {
         <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />
         <Field label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="תאר בקצרה למה האישור..." />
         <TextArea label="תיאור החריגה" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="מה קרה? מה לא חישבנו מראש? כתוצאה ממי זה נגרם?..." />
-        <Field label="סכום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="₪" />
+        <Field label="סכום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="₪" />
         <PhotoPicker photos={photos} onChange={setPhotos} />
       </div>
       <BottomActions>
         <Button
           block
-          disabled={!stage || !title || !amount}
+          disabled={!stage || !title.trim() || !(+amount > 0)}
           onClick={() => {
             addException({ stageId: stage!, title, description: desc, amount: +amount, photos });
             toast('הבקשה נשלחה לאישור הלקוח');
@@ -525,13 +533,13 @@ export function ReceiptForm() {
         <Field aria-label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="כותרת" />
         <div className="flex gap-4">
           <Field aria-label="תאריך" className="flex-1" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="סכום" />
+          <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="סכום" />
         </div>
       </div>
       <BottomActions inline>
         <Button
           className="mx-auto"
-          disabled={!stage || !title || !amount}
+          disabled={!stage || !title.trim() || !(+amount > 0)}
           onClick={() => {
             addReceipt({ stageId: stage!, title, amount: +amount, date, preview: file?.preview, fileUrl: file?.url });
             toast('ההוצאה נוספה');

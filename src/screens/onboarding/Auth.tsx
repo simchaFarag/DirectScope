@@ -1,19 +1,41 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BottomActions, Button, ClearField, Radio } from '@/components/ui';
 import { Icon, type IconName } from '@/components/FigmaIcon';
 import { Heading, SubScreen } from '@/components/layout';
-import { useStore } from '@/data/store';
+import { INVITE_KEY, useStore } from '@/data/store';
 import { errorText, serverUnavailable } from '@/data/remote';
 import { useToast } from '@/components/toast';
-import { auth } from '@/lib/api';
+import { auth, getToken } from '@/lib/api';
 import type { Role, User } from '@/data/types';
 import { pickImages } from '@/lib/files';
 import { cn } from '@/lib/format';
 
 /** Without the API, login falls back to the local demo – only on the dev server, never on the deployed site. */
 const demoLogin = (e: unknown) => import.meta.env.DEV && serverUnavailable(e);
+
+/**
+ * The number being verified. Kept for the tab so reloading the code screen keeps it – the store falls back to the
+ * demo user without a login, and that number belongs to a real person.
+ */
+const LOGIN_PHONE = 'directscope.loginPhone';
+const loginPhone = {
+  get: () => {
+    try {
+      return sessionStorage.getItem(LOGIN_PHONE) ?? '';
+    } catch {
+      return '';
+    }
+  },
+  set: (v: string) => {
+    try {
+      sessionStorage.setItem(LOGIN_PHONE, v);
+    } catch {
+      /* storage unavailable */
+    }
+  },
+};
 
 export function Logo({ size = 78 }: { size?: number }) {
   return (
@@ -50,7 +72,8 @@ export function PhoneLogin() {
   const nav = useNavigate();
   const { s, setUser } = useStore();
   const toast = useToast();
-  const [phone, setPhone] = useState(s.user.phone);
+  // empty on the deployed site (the Figma number is a sample); the dev demo keeps it prefilled for convenience
+  const [phone, setPhone] = useState(() => loginPhone.get() || (import.meta.env.DEV ? s.user.phone : ''));
   const [busy, setBusy] = useState(false);
   const valid = /^0?5\d{8}$/.test(phone.replace(/\D/g, ''));
   return (
@@ -80,6 +103,7 @@ export function PhoneLogin() {
           onClick={async () => {
             const local = phone.replace(/^0/, '');
             setUser({ phone: local });
+            loginPhone.set(local);
             setBusy(true);
             try {
               await auth.requestCode(local);
@@ -102,10 +126,15 @@ export function PhoneLogin() {
 /** login-step 2 */
 export function Otp() {
   const nav = useNavigate();
-  const { s, login, startFresh } = useStore();
+  const { s, login, startFresh, acceptPendingInvite } = useStore();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string[]>(Array(6).fill(''));
+  const phone = loginPhone.get() || (import.meta.env.DEV ? s.user.phone : '');
+  // opened directly (e.g. a reload in another tab) – no number to verify yet
+  useEffect(() => {
+    if (!phone) nav('/login/phone', { replace: true });
+  }, [phone, nav]);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [sent, setSent] = useState(false);
   const full = code.every(Boolean);
@@ -131,7 +160,7 @@ export function Otp() {
       <div className="flex flex-col gap-6 px-6 pt-12 short:pt-6">
         <div className="flex flex-col items-center gap-2 py-4 text-center text-body">
           <p>נא להזין את הקוד בן 6 הספרות שנשלח אל</p>
-          <p dir="ltr">972+ {s.user.phone}</p>
+          <p dir="ltr">+972 {phone}</p>
         </div>
         <div className="flex h-14 items-center justify-center gap-4" dir="ltr">
           {code.map((c, i) => (
@@ -150,7 +179,7 @@ export function Otp() {
         </div>
         <div className="flex items-center justify-center gap-2 text-body">
           <span className="text-muted">לא קיבלת את הקוד?</span>
-          <button className="leading-4 tracking-[0.042px] underline" onClick={() => auth.requestCode(s.user.phone).then(() => setSent(true), (e) => (demoLogin(e) ? setSent(true) : toast(errorText(e), 'info')))}>
+          <button className="leading-4 tracking-[0.042px] underline" onClick={() => auth.requestCode(phone).then(() => setSent(true), (e) => (demoLogin(e) ? setSent(true) : toast(errorText(e), 'info')))}>
             {sent ? 'נשלח שוב ✓' : 'שלח קוד שוב'}
           </button>
         </div>
@@ -162,12 +191,17 @@ export function Otp() {
           onClick={async () => {
             setBusy(true);
             try {
-              const r = await auth.verify(s.user.phone, code.join(''));
+              const r = await auth.verify(phone, code.join(''));
               const u = r.user as Partial<User>;
-              // a returning user with a project goes straight home; new users continue to the profile and project setup
-              if (!r.isNew && (await login(u))) return nav('/app/home', { replace: true });
-              // …with empty fields, not the demo's name, project and expenses
-              startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone: s.user.phone });
+              // new users start from empty fields, not the demo's name, project and expenses
+              if (r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
+              // opened an invite link before logging in → join that project now
+              const joined = await acceptPendingInvite();
+              // a project they own or were invited to opens right away; new users still create their profile first
+              // and then go to it (Profile) instead of setting up a project of their own
+              const hasProject = await login(r.isNew ? { ...u, phone } : u, joined);
+              if (!r.isNew && hasProject) return nav('/app/home', { replace: true });
+              if (!r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
             } catch (e) {
               if (!demoLogin(e)) {
                 setCode(Array(6).fill(''));
@@ -185,6 +219,35 @@ export function Otp() {
       </BottomActions>
     </SubScreen>
   );
+}
+
+/**
+ * /invite?t=… – the link in the WhatsApp invitation. Keeps the token: it's accepted right after the OTP, or right away
+ * when this device is already logged in. No screen of its own – the user lands in login or in the project.
+ */
+export function Invite() {
+  const nav = useNavigate();
+  const [q] = useSearchParams();
+  const { login, acceptPendingInvite } = useStore();
+  useEffect(() => {
+    const t = q.get('t');
+    if (t) {
+      try {
+        localStorage.setItem(INVITE_KEY, t);
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    if (!getToken()) return void nav('/login/phone', { replace: true });
+    acceptPendingInvite()
+      .then(async (projectId) => {
+        if (projectId) await login({}, projectId);
+      })
+      .catch(() => {})
+      .finally(() => nav('/app/home', { replace: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 /** Transitional success / loading screens (Frame 1000005822 / 37 / 38) */
@@ -273,11 +336,12 @@ export function Profile() {
       <BottomActions>
         <Button
           className="mx-auto w-[314px] max-w-full"
-          disabled={!first || !last}
+          disabled={!first.trim() || !last.trim()}
           onClick={() => {
             // A renovator/home owner is the project's client; contractor/architect join as professionals
-            setUser({ firstName: first, lastName: last, gender, role: role === 'renovator' ? 'client' : role, avatar });
-            nav('/setup/details');
+            setUser({ firstName: first.trim(), lastName: last.trim(), gender, role: role === 'renovator' ? 'client' : role, avatar });
+            // invited to a project (joined at login) → straight to it; otherwise set up their own
+            nav(s.remote?.projectId ? '/app/home' : '/setup/details', { replace: !!s.remote?.projectId });
           }}
         >
           התחל

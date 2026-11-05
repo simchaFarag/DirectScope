@@ -30,6 +30,10 @@ export interface Member {
   role: MemberRole;
   permission: Permission;
   avatar?: string;
+  /** secret in this member's invite link (/invite?t=…); only the project owner gets it */
+  inviteToken?: string;
+  /** they opened the link and joined */
+  joined?: boolean;
 }
 
 export interface Contact {

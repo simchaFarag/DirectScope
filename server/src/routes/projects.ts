@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { dateIn, parse } from '../lib/http.js';
+import { dateIn, money, parse } from '../lib/http.js';
 import * as S from '../lib/serialize.js';
 import { me, requireAuth } from '../middleware/auth.js';
-import { access, loadProject, requireEdit, requireOwner } from '../middleware/project.js';
+import { access, loadProject, requireEdit, requireOwner, visibleTo } from '../middleware/project.js';
 import { archiveRouter } from './archive.js';
 import { budgetRouter } from './budget.js';
 import { exceptionsRouter } from './exceptions.js';
@@ -17,7 +17,7 @@ const projectFields = z.object({
   type: z.enum(['renovation', 'addition', 'newHome', 'other']),
   description: z.string().max(5000),
   address: z.string().max(255),
-  estimatedBudget: z.number().int().nonnegative().nullable(),
+  estimatedBudget: money.nullable(),
   startDate: dateIn,
   endDate: dateIn,
   onboarded: z.boolean(),
@@ -30,11 +30,9 @@ projectsRouter.use(requireAuth);
 /** Projects the user owns or was invited to */
 projectsRouter.get('/', async (req, res) => {
   const u = me(req);
-  const projects = await prisma.project.findMany({
-    where: { OR: [{ ownerId: u.id }, { members: { some: { OR: [{ userId: u.id }, { phone: u.phone }] } } }] },
-    orderBy: { createdAt: 'desc' },
-  });
-  res.json(projects.map((p) => ({ ...S.toProject(p, p.ownerId === u.id || u.role !== 'contractor'), isOwner: p.ownerId === u.id })));
+  const projects = await prisma.project.findMany({ where: visibleTo(u.id), orderBy: { createdAt: 'desc' } });
+  // the full numbers come from /:id/state, which knows the member's access – the list only shows them to the owner
+  res.json(projects.map((p) => ({ ...S.toProject(p, p.ownerId === u.id), isOwner: p.ownerId === u.id })));
 });
 
 /** Setup 1/4 (+ optionally the stage split from 4/4 in the same call) */
@@ -114,7 +112,7 @@ project.get('/state', async (req, res) => {
     gallery: gallery.map(S.toGallery),
     inspiration: inspiration.map(S.toInspiration),
     contacts: contacts.map(S.toContact),
-    members: members.map(S.toMember),
+    members: members.map((m) => S.toMember(m, a.isOwner)),
     quotesCount: a.project.quotesCount,
     termsAccepted: !!u.termsAcceptedAt,
   });
@@ -122,6 +120,8 @@ project.get('/state', async (req, res) => {
 
 project.patch('/', requireEdit, async (req, res) => {
   const data = parse(projectFields.partial(), req.body);
+  // restricted members (contractor / professional) can't see the client's budget, so they can't overwrite it either
+  if (!access(req).seesBudget) delete data.estimatedBudget, delete data.onboarded, delete data.quotesCount;
   const updated = await prisma.project.update({ where: { id: access(req).project.id }, data });
   res.json(S.toProject(updated, access(req).seesBudget));
 });

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import App from './App';
 import { StoreProvider } from './data/store';
 import { ToastProvider } from './components/toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -24,10 +25,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       {/* toasts wrap the store so failed server saves can be reported */}
       <ToastProvider>
-        <StoreProvider>
-          <ScrollToTop />
-          <App />
-        </StoreProvider>
+        <ErrorBoundary>
+          <StoreProvider>
+            <ScrollToTop />
+            <App />
+          </StoreProvider>
+        </ErrorBoundary>
       </ToastProvider>
     </BrowserRouter>
   </React.StrictMode>,

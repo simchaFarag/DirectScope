@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import { z, type ZodTypeAny } from 'zod';
+import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { badRequest } from './errors.js';
 
@@ -11,10 +12,22 @@ export const dateIn = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'תאריך בפורמט YYYY-MM-DD')
   .transform((s) => new Date(`${s}T00:00:00Z`));
 
+/** Shekel amounts. The DB column is a 32-bit INT; ₪1B is far above any renovation and keeps us clear of overflow (→ 500). */
+export const MAX_AMOUNT = 1_000_000_000;
+export const money = z.number().int().nonnegative().max(MAX_AMOUNT, 'סכום גבוה מדי');
+
 export const today = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
 
-/** Stored file reference: a url returned from POST /api/uploads (or a public asset path like /img/x.png). */
-export const fileRef = z.string().max(500).refine((s) => s.startsWith('/') || /^https?:\/\//.test(s), 'קישור קובץ לא תקין');
+/**
+ * Stored file reference: a url returned from POST /api/uploads (or one of the app's own images, /img/… /avatars/…).
+ * Other hosts and protocol-relative "//host" urls are refused – an editor could otherwise plant a lookalike
+ * "document" that opens another site, or a tracking pixel as a photo.
+ */
+const ownPath = /^\/(uploads|img|avatars)\/(?!.*\.\.)[\w./%-]+$/;
+export const fileRef = z
+  .string()
+  .max(500)
+  .refine((s) => ownPath.test(s) || (s.startsWith(`${config.PUBLIC_URL}/uploads/`) && !s.includes('..')), 'קישור קובץ לא תקין');
 
 /** Makes sure a stage id from the client belongs to the project in the url. */
 export async function assertStage(projectId: string, stageId: string) {

@@ -14,12 +14,15 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return res.status(err.status).json({ error: { code: err.code ?? 'error', message: err.message } });
   }
   if (err instanceof ZodError) {
+    // our own messages are in Hebrew and say what's wrong ("סכום גבוה מדי") – show the first one; zod's English defaults stay generic
+    const own = err.issues.find((i) => /[֐-׿]/.test(i.message));
     return res.status(400).json({
-      error: { code: 'validation', message: 'נתונים לא תקינים', details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
+      error: { code: 'validation', message: own?.message ?? 'נתונים לא תקינים', details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
     });
   }
   if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE' ? 'הקובץ גדול מדי' : 'שגיאה בהעלאת הקובץ';
+    const message =
+      err.code === 'LIMIT_FILE_SIZE' ? 'הקובץ גדול מדי' : err.code === 'LIMIT_FILE_COUNT' ? 'אפשר להעלות עד 6 קבצים בבת אחת' : 'שגיאה בהעלאת הקובץ';
     return res.status(400).json({ error: { code: err.code.toLowerCase(), message } });
   }
   if (err instanceof Prisma.PrismaClientKnownRequestError) {

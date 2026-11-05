@@ -10,6 +10,7 @@ import { signToken } from '../lib/jwt.js';
 import { normalizePhone } from '../lib/phone.js';
 import { toUser } from '../lib/serialize.js';
 import { sendSms } from '../lib/sms.js';
+import { me, requireAuth } from '../middleware/auth.js';
 
 const OTP_TTL_MS = 5 * 60_000;
 const RESEND_AFTER_MS = 30_000;
@@ -65,7 +66,15 @@ authRouter.post('/otp/verify', async (req, res) => {
 
   const existing = await prisma.user.findUnique({ where: { phone } });
   const user = existing ?? (await prisma.user.create({ data: { phone } }));
-  await prisma.member.updateMany({ where: { phone, userId: null }, data: { userId: user.id } });
+  // Invitations sent before invite links existed have no token – those still join on login by phone.
+  // Anything newer joins only through POST /api/invites/accept (the invitee opened their link).
+  await prisma.member.updateMany({ where: { phone, userId: null, inviteToken: null }, data: { userId: user.id } });
 
-  res.json({ token: signToken(user.id), user: toUser(user), isNew: !existing || !existing.firstName });
+  res.json({ token: signToken(user.id, user.tokenVersion), user: toUser(user), isNew: !existing || !existing.firstName });
+});
+
+/** Ends every session of this user (tokens carry tokenVersion; bumping it invalidates them). */
+authRouter.post('/logout', requireAuth, async (req, res) => {
+  await prisma.user.update({ where: { id: me(req).id }, data: { tokenVersion: { increment: 1 } } });
+  res.status(204).end();
 });

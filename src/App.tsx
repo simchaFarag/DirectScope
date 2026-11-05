@@ -1,7 +1,7 @@
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { getToken } from '@/lib/api';
 import { AppLayout } from '@/components/layout';
-import { Interstitial, Otp, PhoneLogin, Profile, Splash } from '@/screens/onboarding/Auth';
+import { Interstitial, Invite, Otp, PhoneLogin, Profile, Splash } from '@/screens/onboarding/Auth';
 import { BudgetSplit, CheckResults, ProjectDetails, UploadDocs } from '@/screens/onboarding/Setup';
 import { ExpenseForm, InspirationBoard, InspirationUpload, MemberForm, ShareList, StageEdit, StageNew } from '@/screens/shared/Forms';
 import { Home } from '@/screens/app/Home';
@@ -87,7 +87,10 @@ export default function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<Splash />} />
-        <Route path="/screens" element={<ScreensIndex />} />
+        {/* the screen map is a development tool – not part of the deployed site */}
+        {import.meta.env.DEV && <Route path="/screens" element={<ScreensIndex />} />}
+        {/* link from the WhatsApp invitation */}
+        <Route path="/invite" element={<Invite />} />
 
         {/* Login */}
         <Route path="/login/phone" element={<PhoneLogin />} />
@@ -104,6 +107,7 @@ export default function App() {
         <Route path="/setup/results" element={<CheckResults />} />
         <Route path="/setup/budget" element={<BudgetSplit />} />
         <Route path="/setup/expense" element={<ExpenseForm />} />
+        <Route path="/setup/expense/:id" element={<ExpenseForm />} />
         <Route path="/setup/stage/:id" element={<StageEdit />} />
         <Route path="/setup/inspiration" element={<InspirationBoard />} />
         <Route path="/setup/inspiration/upload" element={<InspirationUpload />} />
@@ -133,6 +137,7 @@ export default function App() {
         <Route path="/app/exceptions/new" element={<ExceptionForm />} />
         <Route path="/app/receipt/new" element={<ReceiptForm />} />
         <Route path="/app/expense/new" element={<ExpenseForm />} />
+        <Route path="/app/expense/:id" element={<ExpenseForm />} />
         <Route path="/app/stage/new" element={<StageNew />} />
         <Route path="/app/stage/:id/edit" element={<StageEdit />} />
         <Route path="/app/inspiration/upload" element={<InspirationUpload />} />
