@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
+import { errorText } from '@/data/remote';
 import { Avatar, BottomActions, Button, Checkbox, ConfirmDialog, Field, Modal } from '@/components/ui';
 import { Icon } from '@/components/FigmaIcon';
 import { pickImages } from '@/lib/files';
@@ -284,7 +285,8 @@ export function Payment() {
 /* ---------- פרופיל (not designed yet – minimal) ---------- */
 
 export function ProfileScreen() {
-  const { s, setUser } = useStore();
+  const { s, saveProfile } = useStore();
+  const [saving, setSaving] = useState(false);
   const [first, setFirst] = useState(s.user.firstName);
   const [last, setLast] = useState(s.user.lastName);
   const [avatar, setAvatar] = useState(s.user.avatar);
@@ -308,14 +310,21 @@ export function ProfileScreen() {
       </div>
       <Heading title="עריכת פרטים אישיים" />
       <div className="space-y-4 px-6">
-        <Field label="שם פרטי" value={first} onChange={(e) => setFirst(e.target.value)} />
-        <Field label="שם משפחה" value={last} onChange={(e) => setLast(e.target.value)} />
+        <Field label="שם פרטי" value={first} maxLength={80} onChange={(e) => setFirst(e.target.value)} />
+        <Field label="שם משפחה" value={last} maxLength={80} onChange={(e) => setLast(e.target.value)} />
       </div>
       <BottomActions>
         <Button
           block
-          onClick={() => {
-            setUser({ firstName: first, lastName: last, avatar });
+          disabled={!first.trim() || saving}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await saveProfile({ firstName: first.trim(), lastName: last.trim(), avatar });
+            } catch (e) {
+              setSaving(false);
+              return toast(errorText(e), 'info');
+            }
             toast('הפרטים נשמרו');
             nav(-1);
           }}

@@ -31,13 +31,18 @@ export function FileViewer({ kind }: { kind: 'doc' | 'receipt' }) {
   const [zoom, setZoom] = useState<number | null>(null);
   const item = kind === 'doc' ? s.docs.find((d) => d.id === id) : s.receipts.find((r) => r.id === id);
   if (!item) return <SubScreen title="לא נמצא">{null}</SubScreen>;
-  const preview = item.preview ?? '/img/doc.png';
+  const preview = item.preview ?? '/img/doc.svg';
   const fileName = 'fileName' in item && item.fileName ? item.fileName : `${item.title}.pdf`;
 
   return (
     <SubScreen title={kind === 'doc' ? 'מסמך' : 'אסמכתא'}>
       <div className="space-y-5 px-6 pb-6">
-        <button onClick={() => setZoom(0)} className="block w-full overflow-hidden rounded-lg bg-white p-4 shadow-blue">
+        {/* an image opens enlarged; a PDF / Word file has only the generic icon here – open the file itself */}
+        <button
+          onClick={() => (!item.preview && item.fileUrl ? window.open(item.fileUrl, '_blank', 'noopener') : setZoom(0))}
+          aria-label={item.preview ? `הגדלת ${item.title}` : `פתיחת ${fileName}`}
+          className="block w-full overflow-hidden rounded-lg bg-white p-4 shadow-blue"
+        >
           <img src={preview} alt="" className="mx-auto max-h-[420px] object-contain" />
         </button>
         <div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppBar, Heading, StageTabs, SubScreen, TabScreen } from '@/components/layout';
 import { StageGlyph } from '@/components/icons';
 import { Icon } from '@/components/FigmaIcon';
@@ -8,7 +8,7 @@ import { useToast } from '@/components/toast';
 import { pickDocument, pickImages } from '@/lib/files';
 import { stageExceptions, usePerms, useStore, useTotals } from '@/data/store';
 import type { ExceptionReq } from '@/data/types';
-import { cn, fmtDate, ils, stageLabel, thousands } from '@/lib/format';
+import { cn, fmtDate, ils, stageLabel, thousands, moneyInput, shekels } from '@/lib/format';
 import { ExtrasTab, Hero, SectionHead, SmallIconButton, stageTabs } from './Schedule';
 import { useStageOptions } from './Updates';
 
@@ -152,7 +152,8 @@ export function StageBudget() {
 
   if (stageId === 'extras') return <ExtrasTab base="/app/budget" />;
   const st = s.stages.find((x) => x.id === stageId);
-  if (!st) return null;
+  // an old bookmark / a deleted stage: back to the budget instead of an empty white page
+  if (!st) return <Navigate to="/app/budget" replace />;
   const contractor = !perms.seesBudget;
   const { canEdit } = perms;
   const ex = stageExceptions(s, st.id);
@@ -280,7 +281,7 @@ export function StageBudget() {
               {receipts.map((r) => (
                 /* Figma "פירוט הוצאות - כרטיס" */
                 <button key={r.id} onClick={() => nav(`/app/receipts/${r.id}`)} className="flex w-full items-center gap-2 overflow-hidden rounded-lg bg-bg p-4 text-right">
-                  <img src={r.preview ?? '/img/doc.png'} alt="" className="h-8 w-8 shrink-0 rounded-[5.333px] object-cover" />
+                  <img src={r.preview ?? '/img/doc.svg'} alt="" className="h-8 w-8 shrink-0 rounded-[5.333px] object-cover" />
                   <div className="flex flex-col gap-1.5 whitespace-nowrap text-body">
                     <p className="max-w-[180px] truncate">{r.title}</p>
                     <p className="text-btn font-medium tracking-[0.042px]">{ils(r.amount)}</p>
@@ -434,7 +435,7 @@ export function ExceptionCard({ e, white }: { e: ExceptionReq; white?: boolean }
 export function ExceptionsScreen() {
   const nav = useNavigate();
   const { s } = useStore();
-  const { seesBudget, canEdit } = usePerms();
+  const { seesBudget, canEdit, canApprove } = usePerms();
   const contractor = !seesBudget;
   const pending = s.exceptions.filter((e) => e.status === 'pending').length;
   return (
@@ -446,7 +447,7 @@ export function ExceptionsScreen() {
           <h1 className="font-display text-h1 font-bold tracking-[-0.28px]">אישורי חריגה</h1>
           {pending > 0 && (
             <span className="flex h-6 items-center rounded bg-warn px-2 text-caption font-medium text-[#FEFAF5]">
-              {pending} {pending === 1 ? 'ממתין' : 'ממתינים'} {contractor ? 'לאישור' : 'לאישורך'}
+              {pending} {pending === 1 ? 'ממתין' : 'ממתינים'} {canApprove ? 'לאישורך' : 'לאישור'}
             </span>
           )}
         </div>
@@ -485,15 +486,15 @@ export function ExceptionForm() {
         <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />
         <Field label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="תאר בקצרה למה האישור..." />
         <TextArea label="תיאור החריגה" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="מה קרה? מה לא חישבנו מראש? כתוצאה ממי זה נגרם?..." />
-        <Field label="סכום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="₪" />
+        <Field label="סכום" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="₪" />
         <PhotoPicker photos={photos} onChange={setPhotos} />
       </div>
       <BottomActions>
         <Button
           block
-          disabled={!stage || !title.trim() || !(+amount > 0)}
+          disabled={!stage || !title.trim() || !(shekels(amount) > 0)}
           onClick={() => {
-            addException({ stageId: stage!, title, description: desc, amount: +amount, photos });
+            addException({ stageId: stage!, title, description: desc, amount: shekels(amount), photos });
             toast('הבקשה נשלחה לאישור הלקוח');
             nav(-1);
           }}
@@ -525,7 +526,7 @@ export function ReceiptForm() {
         {!q.get('stage') && <Select placeholder="בחר שלב בנייה" options={options} value={stage} onChange={setStage} />}
         <UploadSlot
           className="aspect-[342/324]"
-          filled={file ? (file.preview ?? '/img/doc.png') : undefined}
+          filled={file ? (file.preview ?? '/img/doc.svg') : undefined}
           label={file?.name ?? 'העלאת קובץ / צילום'}
           onAdd={() => pickDocument().then((f) => f && setFile(f))}
           onRemove={() => setFile(undefined)}
@@ -533,15 +534,15 @@ export function ReceiptForm() {
         <Field aria-label="כותרת" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="כותרת" />
         <div className="flex gap-4">
           <Field aria-label="תאריך" className="flex-1" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="סכום" />
+          <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="סכום" />
         </div>
       </div>
       <BottomActions inline>
         <Button
           className="mx-auto"
-          disabled={!stage || !title.trim() || !(+amount > 0)}
+          disabled={!stage || !title.trim() || !(shekels(amount) > 0)}
           onClick={() => {
-            addReceipt({ stageId: stage!, title, amount: +amount, date, preview: file?.preview, fileUrl: file?.url });
+            addReceipt({ stageId: stage!, title, amount: shekels(amount), date, preview: file?.preview, fileUrl: file?.url });
             toast('ההוצאה נוספה');
             nav(-1);
           }}

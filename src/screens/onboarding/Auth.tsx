@@ -76,13 +76,29 @@ export function PhoneLogin() {
   const [phone, setPhone] = useState(() => loginPhone.get() || (import.meta.env.DEV ? s.user.phone : ''));
   const [busy, setBusy] = useState(false);
   const valid = /^0?5\d{8}$/.test(phone.replace(/\D/g, ''));
+  const submit = async () => {
+    if (!valid || busy) return;
+    const local = phone.replace(/^0/, '');
+    setUser({ phone: local });
+    loginPhone.set(local);
+    setBusy(true);
+    try {
+      await auth.requestCode(local);
+    } catch (e) {
+      // no server behind the app → continue as the local demo (dev only)
+      if (!demoLogin(e)) return toast(errorText(e), 'info');
+    } finally {
+      setBusy(false);
+    }
+    nav('/login/otp');
+  };
   return (
     <SubScreen title="הרשמה / כניסה לחשבון" onBack={() => nav('/')}>
       <Heading title="מה מספר הטלפון שלך?" sub="יישלח אליך קוד אימות לאישור המספר" />
       {/* Figma: 48px number field (+972, number, clear) with the Israeli flag pill on its left; the note 24px below */}
       <div className="flex flex-col gap-6 px-6">
         <div className="flex items-center gap-2">
-          <ClearField value={phone} onChange={(v) => setPhone(v.replace(/[^\d]/g, '').slice(0, 10))} placeholder="527683159" tel autoFocus className="h-12 flex-1" />
+          <ClearField value={phone} onChange={(v) => setPhone(v.replace(/[^\d]/g, '').slice(0, 10))} placeholder="527683159" tel autoFocus onEnter={submit} className="h-12 flex-1" />
           <span className="flex h-10 shrink-0 items-center rounded-full border border-primary-100 px-2" aria-label="ישראל +972">
             <Icon name="down" />
             <span className="grid w-10 place-items-center">
@@ -100,21 +116,7 @@ export function PhoneLogin() {
         <Button
           className="mx-auto w-[314px] max-w-full"
           disabled={!valid || busy}
-          onClick={async () => {
-            const local = phone.replace(/^0/, '');
-            setUser({ phone: local });
-            loginPhone.set(local);
-            setBusy(true);
-            try {
-              await auth.requestCode(local);
-            } catch (e) {
-              // no server behind the app → continue as the local demo (dev only)
-              if (!demoLogin(e)) return toast(errorText(e), 'info');
-            } finally {
-              setBusy(false);
-            }
-            nav('/login/otp');
-          }}
+          onClick={submit}
         >
           אישור
         </Button>
@@ -172,7 +174,10 @@ export function Otp() {
               autoFocus={i === 0}
               aria-label={`ספרה ${i + 1}`}
               onChange={(e) => set(i, e.target.value)}
-              onKeyDown={(e) => e.key === 'Backspace' && !c && i > 0 && refs.current[i - 1]?.focus()}
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' && !c && i > 0) refs.current[i - 1]?.focus();
+                if (e.key === 'Enter') verify();
+              }}
               className="h-10 w-10 rounded-lg border border-primary-200 bg-white text-center text-body focus:border-primary focus:outline-none"
             />
           ))}
@@ -188,37 +193,41 @@ export function Otp() {
         <Button
           className="mx-auto w-[314px] max-w-full"
           disabled={!full || busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              const r = await auth.verify(phone, code.join(''));
-              const u = r.user as Partial<User>;
-              // new users start from empty fields, not the demo's name, project and expenses
-              if (r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
-              // opened an invite link before logging in → join that project now
-              const joined = await acceptPendingInvite();
-              // a project they own or were invited to opens right away; new users still create their profile first
-              // and then go to it (Profile) instead of setting up a project of their own
-              const hasProject = await login(r.isNew ? { ...u, phone } : u, joined);
-              if (!r.isNew && hasProject) return nav('/app/home', { replace: true });
-              if (!r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
-            } catch (e) {
-              if (!demoLogin(e)) {
-                setCode(Array(6).fill(''));
-                refs.current[0]?.focus();
-                return toast(errorText(e), 'info');
-              }
-            } finally {
-              setBusy(false);
-            }
-            nav('/login/verified');
-          }}
+          onClick={verify}
         >
           המשך
         </Button>
       </BottomActions>
     </SubScreen>
   );
+
+  /** the code boxes call it on Enter too (a keyboard on desktop) */
+  async function verify() {
+    if (!full || busy) return;
+    setBusy(true);
+    try {
+      const r = await auth.verify(phone, code.join(''));
+      const u = r.user as Partial<User>;
+      // new users start from empty fields, not the demo's name, project and expenses
+      if (r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
+      // opened an invite link before logging in → join that project now
+      const joined = await acceptPendingInvite();
+      // a project they own or were invited to opens right away; new users still create their profile first
+      // and then go to it (Profile) instead of setting up a project of their own
+      const hasProject = await login(r.isNew ? { ...u, phone } : u, joined);
+      if (!r.isNew && hasProject) return nav('/app/home', { replace: true });
+      if (!r.isNew) startFresh({ ...u, firstName: u.firstName ?? '', lastName: u.lastName ?? '', phone });
+    } catch (e) {
+      if (!demoLogin(e)) {
+        setCode(Array(6).fill(''));
+        refs.current[0]?.focus();
+        return toast(errorText(e), 'info');
+      }
+    } finally {
+      setBusy(false);
+    }
+    nav('/login/verified');
+  }
 }
 
 /**
@@ -292,7 +301,9 @@ const roles: { value: Role; label: string; icon: IconName }[] = [
 /** login-step 3 – create profile */
 export function Profile() {
   const nav = useNavigate();
-  const { s, setUser } = useStore();
+  const toast = useToast();
+  const { s, saveProfile } = useStore();
+  const [saving, setSaving] = useState(false);
   const [role, setRole] = useState<Role>(s.user.role === 'client' ? 'renovator' : s.user.role);
   const [first, setFirst] = useState(s.user.firstName);
   const [last, setLast] = useState(s.user.lastName);
@@ -321,8 +332,8 @@ export function Profile() {
           <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-50 text-primary">{avatar ? <img src={avatar} alt="" className="h-full w-full object-cover" /> : <Icon name="jpeg" />}</span>
           {avatar ? 'החלפת תמונה' : 'הוסף תמונת פרופיל (לא חובה)'}
         </button>
-        <ClearField value={first} onChange={setFirst} placeholder="שם פרטי" className="w-full" />
-        <ClearField value={last} onChange={setLast} placeholder="שם משפחה" className="w-full" />
+        <ClearField value={first} onChange={setFirst} placeholder="שם פרטי" maxLength={80} className="w-full" />
+        <ClearField value={last} onChange={setLast} placeholder="שם משפחה" maxLength={80} className="w-full" />
         <div className="flex w-full flex-col gap-2.5 rounded-lg border border-primary-100 px-4 py-2">
           <p className="text-caption text-muted">מגדר</p>
           <div className="flex items-start gap-4">
@@ -336,10 +347,17 @@ export function Profile() {
       <BottomActions>
         <Button
           className="mx-auto w-[314px] max-w-full"
-          disabled={!first.trim() || !last.trim()}
-          onClick={() => {
-            // A renovator/home owner is the project's client; contractor/architect join as professionals
-            setUser({ firstName: first.trim(), lastName: last.trim(), gender, role: role === 'renovator' ? 'client' : role, avatar });
+          disabled={!first.trim() || !last.trim() || saving}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              // A renovator/home owner is the project's client; contractor/architect join as professionals
+              await saveProfile({ firstName: first.trim(), lastName: last.trim(), gender, role: role === 'renovator' ? 'client' : role, avatar });
+            } catch (e) {
+              // stay on the screen – moving on lost the name, gender and picture
+              setSaving(false);
+              return toast(errorText(e), 'info');
+            }
             // invited to a project (joined at login) → straight to it; otherwise set up their own
             nav(s.remote?.projectId ? '/app/home' : '/setup/details', { replace: !!s.remote?.projectId });
           }}

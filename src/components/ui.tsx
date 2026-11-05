@@ -61,14 +61,47 @@ export function Field({ label, hint, className, ...p }: InputHTMLAttributes<HTML
  * Figma filled text field: value + clear (×) on the left. `tel` shows a muted "+972" before the number and reads left-to-right
  * ("+972 527683159 … ×"); `suffix` goes before the clear button; `className` sets the height (40px by default).
  */
-export function ClearField({ value, onChange, placeholder, tel, suffix, className, autoFocus }: { value: string; onChange: (v: string) => void; placeholder: string; tel?: boolean; suffix?: ReactNode; className?: string; autoFocus?: boolean }) {
+export function ClearField({
+  value,
+  onChange,
+  placeholder,
+  tel,
+  suffix,
+  className,
+  autoFocus,
+  maxLength,
+  onEnter,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  tel?: boolean;
+  suffix?: ReactNode;
+  className?: string;
+  autoFocus?: boolean;
+  maxLength?: number;
+  /** Enter key (a keyboard on desktop) – e.g. submit the screen */
+  onEnter?: () => void;
+}) {
+  // the phone field's placeholder is a sample number – screen readers get a name instead
+  const label = tel ? 'מספר טלפון' : placeholder;
   return (
     <div dir={tel && value ? 'ltr' : undefined} className={cn('flex h-10 min-w-0 items-center gap-2 rounded-lg border border-primary-100 bg-white px-4 focus-within:border-primary', className)}>
       {tel && value && <span className="text-body text-muted">+972</span>}
-      <input value={value} onChange={(e) => onChange(e.target.value)} inputMode={tel ? 'tel' : undefined} autoFocus={autoFocus} placeholder={placeholder} aria-label={placeholder} className="min-w-0 flex-1 bg-transparent text-body text-ink placeholder:text-muted focus:outline-none" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode={tel ? 'tel' : undefined}
+        autoFocus={autoFocus}
+        maxLength={maxLength}
+        onKeyDown={onEnter && ((e) => e.key === 'Enter' && onEnter())}
+        placeholder={placeholder}
+        aria-label={label}
+        className="min-w-0 flex-1 bg-transparent text-body text-ink placeholder:text-muted focus:outline-none"
+      />
       {suffix}
       {value && (
-        <button type="button" onClick={() => onChange('')} className="shrink-0 text-ink" aria-label={`ניקוי ${placeholder}`}>
+        <button type="button" onClick={() => onChange('')} className="shrink-0 text-ink" aria-label={`ניקוי ${label}`}>
           <X size={20} strokeWidth={1.2} />
         </button>
       )}

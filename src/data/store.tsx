@@ -284,7 +284,9 @@ function useStoreValue() {
         estimatedBudget: p.project.estimatedBudget ?? null,
         onboarded: true,
         quotesCount: p.quotesCount,
-        stages: p.stages.map((st) => ({ ...clean(st), paid: 0, tasks: st.tasks.map((t) => t.title) })),
+        // no contract exists yet in setup: the contract sum starts as the budget the client set (the template's own
+        // contract numbers used to reach the contractor for every stage that wasn't edited)
+        stages: p.stages.map((st) => ({ ...clean(st), contractAmount: st.budget, paid: 0, tasks: st.tasks.map((t) => t.title) })),
       });
       // the project exists from here on: point the app at it before the rest, so one item that fails can't leave the
       // app working on a local copy while the project sits on the server without it
@@ -328,6 +330,15 @@ function useStoreValue() {
       const { firstName, lastName, gender, role, avatar } = u;
       const body = clean({ firstName, lastName, gender, role, avatar });
       if (Object.values(body).some((v) => v !== undefined)) syncMe(() => api.patch('/me', body));
+    },
+    /**
+     * Profile screens: waits for the server and throws when it refuses, so the screen can stay and say why. Fire-and-
+     * forget (setUser) moved on, and the reload after the failed save then wiped the name ("צהריים טובים ,").
+     */
+    saveProfile: async (u: Partial<User>) => {
+      const { firstName, lastName, gender, role, avatar } = u;
+      if (getToken()) await api.patch('/me', clean({ firstName, lastName, gender, role, avatar }));
+      patch((p) => ({ user: { ...p.user, ...u } }));
     },
     setProject: (pr: Partial<Project>) => {
       patch((p) => ({ project: { ...p.project, ...pr } }));
@@ -449,6 +460,7 @@ function useStoreValue() {
         const u = p.updates.find((x) => x.id === id);
         return {
           updates: p.updates.map((x) => (x.id === id ? { ...x, status: 'approved' } : x)),
+          stages: u?.taskId ? setTaskStatus(p.stages, u.taskId, 'done') : p.stages,
           // approved updates with a photo move to the archive gallery
           gallery: [...(u?.photos?.length ? u.photos : u?.photo ? [u.photo] : []).map((image) => ({ id: uid(), title: 'עידכון יומי', date: today(), image })), ...p.gallery],
         };
@@ -456,7 +468,14 @@ function useStoreValue() {
       sync((b) => api.post(`${b}/updates/${id}/approve`));
     },
     rejectUpdate: (id: string, reason: string) => {
-      patch((p) => ({ updates: p.updates.map((x) => (x.id === id ? { ...x, status: 'rejected', rejectReason: reason } : x)) }));
+      patch((p) => {
+        const u = p.updates.find((x) => x.id === id);
+        return {
+          updates: p.updates.map((x) => (x.id === id ? { ...x, status: 'rejected', rejectReason: reason } : x)),
+          // a rejected "משימה הושלמה" reopens the task (same as the server)
+          stages: u?.taskId ? setTaskStatus(p.stages, u.taskId, 'todo') : p.stages,
+        };
+      });
       sync((b) => api.post(`${b}/updates/${id}/reject`, { reason }));
     },
     addComment: (updateId: string, text: string) => {
@@ -508,12 +527,16 @@ function useStoreValue() {
         const contractor = !(p.remote?.access?.seesBudget ?? p.user.role !== 'contractor');
         const documented = contractor || note || photo;
         return {
-          stages: p.stages.map((x) => (x.id === stageId ? { ...x, tasks: x.tasks.map((k) => (k.id === taskId ? { ...k, status: 'done', note, photo } : k)) } : x)),
+          // a contractor's completion counts once the client approves it – until then the task is "בתהליך"
+          stages: p.stages.map((x) =>
+            x.id === stageId ? { ...x, tasks: x.tasks.map((k) => (k.id === taskId ? { ...k, status: contractor ? 'inProgress' : 'done', note, photo } : k)) } : x,
+          ),
           updates: documented
             ? [
                 {
                   id: uid(),
                   stageId,
+                  taskId,
                   author: `${p.user.firstName} ${p.user.lastName}`,
                   authorTitle: roleTitle(p.user.role),
                   time: 'עכשיו',
@@ -607,12 +630,18 @@ export function useTotals() {
     const paid = s.stages.reduce((a, st) => a + st.paid, 0);
     const allTasks = s.stages.flatMap((st) => st.tasks);
     const progress = allTasks.length ? Math.round((allTasks.filter((t) => t.status === 'done').length / allTasks.length) * 100) : 0;
-    const daysLeft = Math.max(0, Math.ceil((new Date(s.project.endDate).getTime() - Date.now()) / 86400000));
+    // the estimated end moves out with the last stage – a stage that runs past the project's end date used to be ignored
+    const endDate = s.stages.reduce((a, st) => (st.endDate > a ? st.endDate : a), s.project.endDate);
+    const daysLeft = Math.max(0, Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000));
     // "ימי עסקים" on the schedule dates card: Sunday–Thursday
     let workDaysLeft = 0;
     for (let i = 1; i <= daysLeft; i++) if (new Date(Date.now() + i * 86400000).getDay() < 5) workDaysLeft++;
-    return { approvedEx, extras, base, total, paid, remaining: total - paid, progress, daysLeft, workDaysLeft };
+    return { approvedEx, extras, base, total, paid, remaining: total - paid, progress, endDate, daysLeft, workDaysLeft };
   }, [s]);
+}
+
+function setTaskStatus(stages: Stage[], taskId: string, status: Task['status']): Stage[] {
+  return stages.map((st) => (st.tasks.some((t) => t.id === taskId) ? { ...st, tasks: st.tasks.map((t) => (t.id === taskId ? { ...t, status } : t)) } : st));
 }
 
 export function stageProgress(st: Stage) {

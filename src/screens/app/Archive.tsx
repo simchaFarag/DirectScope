@@ -151,7 +151,7 @@ export function Archive() {
             <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 xl:grid-cols-3">
               {docs.map((d) => (
                 <button key={d.id} onClick={() => nav(`/app/doc/${d.id}`)} className="flex w-full items-center gap-2 overflow-hidden rounded-lg bg-bg p-4 text-right lg:bg-white">
-                  <img src={d.preview ?? '/img/doc.png'} alt="" className="h-8 w-8 shrink-0 rounded-[5.333px] object-cover" />
+                  <img src={d.preview ?? '/img/doc.svg'} alt="" className="h-8 w-8 shrink-0 rounded-[5.333px] object-cover" />
                   <span className="flex flex-col gap-1.5 whitespace-nowrap">
                     <span className="max-w-[180px] truncate text-body font-medium leading-4 tracking-[0.042px]">{d.title}</span>
                     <span className="text-body text-muted">{fmtDate(d.date)}</span>
@@ -190,6 +190,8 @@ export function Archive() {
                   </span>
                 </button>
               ))}
+              {/* same empty state as the documents tab (a new project's gallery was a blank area) */}
+              {!gallery.length && <p className="col-span-full py-6 text-center text-body text-muted">לא נמצאו תמונות</p>}
             </div>
           )}
 

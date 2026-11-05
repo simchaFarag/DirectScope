@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { forbidden, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { fileRef, parse, param } from '../lib/http.js';
 import { normalizePhone } from '../lib/phone.js';
 import { toMember } from '../lib/serialize.js';
@@ -37,12 +37,12 @@ membersRouter.post('/members', requireOwner, async (req, res) => {
   const projectId = access(req).project.id;
   const { inviteToken: token, ...body } = parse(memberInput, req.body);
   const phone = normalizePhone(body.phone);
-  const m = await prisma.member.upsert({
-    where: { projectId_phone: { projectId, phone } },
-    create: { ...body, phone, projectId, inviteToken: token ?? newToken() },
-    // inviting the same phone again sends a new link – it replaces the old one unless they already joined
-    update: { ...body, phone, ...(token && { inviteToken: token }) },
-  });
+  if (phone === me(req).phone) throw badRequest('זה המספר שלך – אין צורך להזמין אותו', 'own_phone');
+  // A second invite for the same phone used to overwrite the first one: name, role, permission and the link already sent
+  // on WhatsApp. Changing an existing member goes through PATCH (the "עריכה" screen) instead.
+  const exists = await prisma.member.findUnique({ where: { projectId_phone: { projectId, phone } }, select: { id: true } });
+  if (exists) throw conflict('המספר הזה כבר משותף בפרויקט');
+  const m = await prisma.member.create({ data: { ...body, phone, projectId, inviteToken: token ?? newToken() } });
   res.status(201).json(toMember(m));
 });
 
@@ -52,6 +52,7 @@ membersRouter.patch('/members/:id', requireOwner, async (req, res) => {
   if (!m) throw notFound('השותף לא נמצא');
   const { phone, inviteToken: token, ...rest } = parse(memberInput.partial(), req.body);
   const phoneChanged = !!phone && normalizePhone(phone) !== m.phone;
+  if (phoneChanged && normalizePhone(phone) === me(req).phone) throw badRequest('זה המספר שלך – אין צורך להזמין אותו', 'own_phone');
   const updated = await prisma.member.update({
     where: { id: m.id },
     data: {

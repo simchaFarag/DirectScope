@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { assertStage, fileRef, optionalStage, parse, today, param } from '../lib/http.js';
-import { roleTitle, toComment, toUpdate } from '../lib/serialize.js';
+import { authorTitle, toComment, toUpdate } from '../lib/serialize.js';
 import { me } from '../middleware/auth.js';
 import { access, requireApprove, requireEdit } from '../middleware/project.js';
 
@@ -42,7 +42,7 @@ updatesRouter.post('/updates', requireEdit, async (req, res) => {
       projectId: a.project.id,
       authorId: u.id,
       authorName: `${u.firstName} ${u.lastName}`.trim(),
-      authorTitle: roleTitle(u.role),
+      authorTitle: authorTitle(u, a),
       avatar: u.avatar,
       // the client's own updates don't need their own approval
       status: a.canApprove ? 'approved' : 'pending',
@@ -66,23 +66,33 @@ updatesRouter.post('/updates/:id/approve', requireApprove, async (req, res) => {
   const [updated] = await prisma.$transaction([
     prisma.update.update({ where: { id: up.id }, data: { status: 'approved', rejectReason: null }, include: withComments }),
     prisma.galleryItem.createMany({ data: photos.map((image) => ({ projectId: a.project.id, title: 'עידכון יומי', date: today(), image })) }),
+    // a contractor's "משימה הושלמה" counts only now
+    ...(up.taskId ? [prisma.task.updateMany({ where: { id: up.taskId }, data: { status: 'done' } })] : []),
   ]);
   res.json(toUpdate(updated, me(req).id));
 });
 
 updatesRouter.post('/updates/:id/reject', requireApprove, async (req, res) => {
   const a = access(req);
-  await findUpdate(a.project.id, param(req));
+  const up = await findUpdate(a.project.id, param(req));
   const { reason } = parse(z.object({ reason: z.string().trim().max(1000).default('') }), req.body ?? {});
-  const updated = await prisma.update.update({ where: { id: param(req) }, data: { status: 'rejected', rejectReason: reason }, include: withComments });
+  const [updated] = await prisma.$transaction([
+    prisma.update.update({ where: { id: up.id }, data: { status: 'rejected', rejectReason: reason }, include: withComments }),
+    // a rejected "משימה הושלמה" reopens the task (also when it had been approved and the client changed their mind)
+    ...(up.taskId ? [prisma.task.updateMany({ where: { id: up.taskId }, data: { status: 'todo' } })] : []),
+  ]);
   res.json(toUpdate(updated, me(req).id));
 });
 
 updatesRouter.delete('/updates/:id', requireEdit, async (req, res) => {
   const a = access(req);
   const up = await findUpdate(a.project.id, param(req));
-  if (!a.isOwner && up.authorId !== me(req).id) throw badRequest('אפשר למחוק רק עדכון שכתבת');
-  await prisma.update.delete({ where: { id: up.id } });
+  if (!a.isOwner && up.authorId !== me(req).id) throw forbidden('אפשר למחוק רק עדכון שכתבת');
+  await prisma.$transaction([
+    prisma.update.delete({ where: { id: up.id } }),
+    // withdrawing a completion that is still waiting puts the task back to todo
+    ...(up.taskId && up.status === 'pending' ? [prisma.task.updateMany({ where: { id: up.taskId, status: 'inProgress' }, data: { status: 'todo' } })] : []),
+  ]);
   res.status(204).end();
 });
 

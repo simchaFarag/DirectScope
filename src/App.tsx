@@ -82,6 +82,11 @@ function RequireLogin() {
   return import.meta.env.DEV || getToken() ? <Outlet /> : <Navigate to="/" replace />;
 }
 
+/** Unknown address: a logged-in user goes to the app, not back to the "מתחילים" welcome screen. */
+function NotFound() {
+  return <Navigate to={getToken() ? '/app/home' : '/'} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -150,7 +155,7 @@ export default function App() {
         <Route path="/app/profile" element={<ProfileScreen />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   );

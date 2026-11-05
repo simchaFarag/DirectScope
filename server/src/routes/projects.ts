@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { forbidden } from '../lib/errors.js';
 import { dateIn, money, parse } from '../lib/http.js';
+import { QUOTE_DOCS_HIDDEN } from '../lib/quotes.js';
 import * as S from '../lib/serialize.js';
 import { me, requireAuth } from '../middleware/auth.js';
 import { access, loadProject, requireEdit, requireOwner, visibleTo } from '../middleware/project.js';
@@ -89,7 +91,7 @@ project.get('/state', async (req, res) => {
     prisma.update.findMany({ where, include: { comments: true }, orderBy: newest }),
     prisma.exceptionReq.findMany({ where, orderBy: newest }),
     prisma.reminder.findMany({ where, orderBy: { createdAt: 'asc' } }),
-    prisma.document.findMany({ where, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
+    prisma.document.findMany({ where: { ...where, ...(!a.seesBudget && QUOTE_DOCS_HIDDEN) }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
     prisma.galleryItem.findMany({ where, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
     prisma.inspiration.findMany({ where, orderBy: newest }),
     prisma.contact.findMany({ where, orderBy: { createdAt: 'asc' } }),
@@ -118,10 +120,10 @@ project.get('/state', async (req, res) => {
   });
 });
 
+// Name, address and dates are the client's – a contractor (restricted member) changing them would do it unseen.
 project.patch('/', requireEdit, async (req, res) => {
+  if (!access(req).seesBudget) throw forbidden('רק הלקוח יכול לשנות את פרטי הפרויקט');
   const data = parse(projectFields.partial(), req.body);
-  // restricted members (contractor / professional) can't see the client's budget, so they can't overwrite it either
-  if (!access(req).seesBudget) delete data.estimatedBudget, delete data.onboarded, delete data.quotesCount;
   const updated = await prisma.project.update({ where: { id: access(req).project.id }, data });
   res.json(S.toProject(updated, access(req).seesBudget));
 });

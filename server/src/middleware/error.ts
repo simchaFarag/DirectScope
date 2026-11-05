@@ -29,6 +29,10 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     if (err.code === 'P2025') return res.status(404).json({ error: { code: 'not_found', message: 'לא נמצא' } });
     if (err.code === 'P2002') return res.status(409).json({ error: { code: 'conflict', message: 'הרשומה כבר קיימת' } });
   }
+  // body-parser: request over the 1MB json limit (was answered as a 500 and logged as a server error)
+  if ((err as { type?: string })?.type === 'entity.too.large') {
+    return res.status(413).json({ error: { code: 'too_large', message: 'הבקשה גדולה מדי' } });
+  }
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ error: { code: 'bad_json', message: 'JSON לא תקין' } });
   }

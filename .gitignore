@@ -4,3 +4,6 @@ dist
 
 *.zip
 *.tgz
+
+# QA screenshots – kept locally, not in git
+docs/qa-screenshots/

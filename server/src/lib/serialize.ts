@@ -29,6 +29,16 @@ export const localPhone = (p: string) => p.replace(/^\+972/, '');
 
 export const roleTitle = (r: User['role']) => ({ client: 'בעל הבית', contractor: 'קבלן ראשי', architect: 'אדריכל', renovator: 'משפץ' })[r];
 
+/** "שיתוף" roles – what the owner chose when inviting the member */
+export const memberRoleTitle = (r: Member['role']) => ({ professional: 'בעל מקצוע', family: 'משפחה', renovator: 'משפץ' })[r];
+
+/**
+ * The title shown under an author's name on updates / exceptions. In someone else's project it comes from the invite,
+ * not from the role the user picked at signup – a contractor who picked "משפץ" must not show up as "בעל הבית".
+ */
+export const authorTitle = (u: User, a: { isOwner: boolean; memberRole?: Member['role'] }) =>
+  !a.isOwner && a.memberRole ? memberRoleTitle(a.memberRole) : roleTitle(u.role);
+
 export const toUser = (u: User) => ({
   id: u.id,
   firstName: u.firstName,
@@ -117,6 +127,7 @@ export const toUpdate = (u: Update & { comments: Comment[] }, meId?: string) => 
     photos,
     status: u.status,
     rejectReason: u.rejectReason ?? undefined,
+    taskId: u.taskId ?? undefined,
     comments: [...u.comments].sort((a, b) => +a.createdAt - +b.createdAt).map((c) => toComment(c, meId)),
   };
 };

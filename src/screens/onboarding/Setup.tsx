@@ -7,7 +7,7 @@ import { BottomActions, Button, ClearField, Field, Select, UploadSlot } from '@/
 import { useStore } from '@/data/store';
 import type { ProjectType } from '@/data/types';
 import { pickDocument } from '@/lib/files';
-import { cn, ils, stageLabel } from '@/lib/format';
+import { cn, ils, stageLabel, moneyInput, moneyText, shekels } from '@/lib/format';
 
 const types: { value: ProjectType; label: string }[] = [
   { value: 'renovation', label: 'שיפוץ דירה' },
@@ -37,14 +37,14 @@ export function ProjectDetails() {
           <Field aria-label="תיאור נוסף" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="תיאור נוסף (לא חובה)" />
         </div>
         <Field aria-label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת הנכס" />
-        <ClearField value={budget && ils(+budget)} onChange={(v) => setBudget(v.replace(/\D/g, '').slice(0, 9))} placeholder="תקציב משוער (לא חובה)" />
+        <ClearField value={moneyText(budget)} onChange={(v) => setBudget(moneyInput(v))} placeholder="תקציב משוער (לא חובה)" />
       </div>
       <BottomActions>
         <Button
           block
           disabled={!name.trim() || !address.trim()}
           onClick={() => {
-            setProject({ name: name.trim(), type, description: desc.trim(), address: address.trim(), estimatedBudget: budget ? +budget : undefined });
+            setProject({ name: name.trim(), type, description: desc.trim(), address: address.trim(), estimatedBudget: budget ? shekels(budget) : undefined });
             nav('/setup/docs');
           }}
         >

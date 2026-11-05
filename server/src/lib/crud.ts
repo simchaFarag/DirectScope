@@ -2,7 +2,7 @@ import type { RequestHandler, Router } from 'express';
 import type { ZodObject, ZodRawShape } from 'zod';
 import { notFound } from './errors.js';
 import { assertStage, parse, param } from './http.js';
-import { access, requireEdit } from '../middleware/project.js';
+import { access, requireEdit, type Access } from '../middleware/project.js';
 
 /** The subset of a Prisma model delegate that the generic routes use. */
 interface Delegate {
@@ -20,6 +20,8 @@ interface Options<Shape extends ZodRawShape> {
   orderBy?: object;
   /** extra guards for every route (e.g. requireBudget) */
   guard?: RequestHandler[];
+  /** extra row filter by what the member may see – applied to list, update and delete alike */
+  scope?: (a: Access) => object;
   /** fill in defaults / derived columns before create */
   prepare?: (data: Record<string, unknown>) => Record<string, unknown>;
 }
@@ -32,8 +34,9 @@ interface Options<Shape extends ZodRawShape> {
 export function crud<Shape extends ZodRawShape>(router: Router, path: string, o: Options<Shape>) {
   const guard = o.guard ?? [];
 
-  const own = async (projectId: string, id: string) => {
-    const row = await o.model.findFirst({ where: { id, projectId } });
+  const scope = (a: Access) => (o.scope ? o.scope(a) : {});
+  const own = async (a: Access, id: string) => {
+    const row = await o.model.findFirst({ where: { ...scope(a), id, projectId: a.project.id } });
     if (!row) throw notFound();
     return row;
   };
@@ -42,7 +45,7 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
   };
 
   router.get(path, ...guard, async (req, res) => {
-    const rows = await o.model.findMany({ where: { projectId: access(req).project.id }, orderBy: o.orderBy ?? { createdAt: 'asc' } });
+    const rows = await o.model.findMany({ where: { ...scope(access(req)), projectId: access(req).project.id }, orderBy: o.orderBy ?? { createdAt: 'asc' } });
     res.json(rows.map(o.map));
   });
 
@@ -57,7 +60,7 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
 
   router.patch(`${path}/:id`, ...guard, requireEdit, async (req, res) => {
     const projectId = access(req).project.id;
-    await own(projectId, param(req));
+    await own(access(req), param(req));
     const data = parse(o.input.partial(), req.body) as Record<string, unknown>;
     await checkStage(projectId, data);
     const row = await o.model.update({ where: { id: param(req) }, data });
@@ -65,7 +68,7 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
   });
 
   router.delete(`${path}/:id`, ...guard, requireEdit, async (req, res) => {
-    await own(access(req).project.id, param(req));
+    await own(access(req), param(req));
     await o.model.delete({ where: { id: param(req) } });
     res.status(204).end();
   });

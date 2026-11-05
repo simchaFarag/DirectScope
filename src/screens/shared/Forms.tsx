@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { Icon, type IconName } from '@/components/FigmaIcon';
 import { useToast } from '@/components/toast';
@@ -8,7 +8,7 @@ import { Avatar, BottomActions, Button, ClearField, Field, Modal, Select, TextAr
 import { usePerms, useStore } from '@/data/store';
 import type { ExpenseKind, MemberRole, Permission } from '@/data/types';
 import { pickImages } from '@/lib/files';
-import { cn, fmtDate, ils, stageLabel } from '@/lib/format';
+import { cn, durationLabel, fmtDate, ils, stageLabel, moneyInput, moneyText, shekels } from '@/lib/format';
 
 const inSetup = (path: string) => path.startsWith('/setup');
 
@@ -62,16 +62,16 @@ export function ExpenseForm() {
             ),
           }}
         />
-        <Field aria-label="סכום לתשלום" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="סכום לתשלום" />
+        <Field aria-label="סכום לתשלום" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="סכום לתשלום" />
         <Field aria-label="מספר משימות לביצוע" inputMode="numeric" value={tasks} onChange={(e) => setTasks(e.target.value.replace(/\D/g, ''))} placeholder="מספר משימות לביצוע (לא חובה)" />
         <Field aria-label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="זמן עבודה (לא חובה)" />
       </div>
       <BottomActions>
         <Button
           className="mx-auto w-[314px] max-w-full"
-          disabled={!title?.trim() || !(+amount > 0)}
+          disabled={!title?.trim() || !(shekels(amount) > 0)}
           onClick={() => {
-            const e = { kind: kind!, title: title!.trim(), amount: +amount, tasks: tasks ? +tasks : undefined, duration: duration.trim() || undefined };
+            const e = { kind: kind!, title: title!.trim(), amount: shekels(amount), tasks: tasks ? +tasks : undefined, duration: duration.trim() || undefined };
             if (existing) updateExtra(existing.id, e);
             else addExtra(e);
             toast(existing ? 'ההוצאה עודכנה' : 'ההוצאה נוספה לתקציב');
@@ -102,7 +102,7 @@ export function StageEdit() {
   const [end, setEnd] = useState(st?.endDate ?? '');
   const [duration, setDuration] = useState(st?.duration ?? '');
   const [datesOpen, setDatesOpen] = useState(false);
-  if (!st) return null;
+  if (!st) return <Navigate to={inSetup(pathname) ? "/setup/budget" : "/app/schedule"} replace />;
   const setup = inSetup(pathname);
   const contractor = !seesBudget;
   const badDates = !!start && !!end && end < start;
@@ -123,7 +123,7 @@ export function StageEdit() {
       {contractor ? (
         <Field label="תקציב" value={ils(+contract || 0)} readOnly aria-readonly="true" className="text-muted" />
       ) : (
-        <Field label="תקציב" inputMode="numeric" value={budget && ils(+budget)} onChange={(e) => setBudget(e.target.value.replace(/\D/g, '').slice(0, 9))} />
+        <Field label="תקציב" inputMode="numeric" value={moneyText(budget)} onChange={(e) => setBudget(moneyInput(e.target.value))} />
       )}
       {setup ? (
         <Field label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} />
@@ -151,10 +151,13 @@ export function StageEdit() {
         className="w-[314px] max-w-full self-end"
         disabled={!name.trim() || badDates}
         onClick={() => {
-          // During setup there is no separate contract yet: the contract sum follows the stage budget, so the contractor
-          // later sees the amount the client actually set (it used to keep the template's number).
-          const contractAmount = setup ? +budget || 0 : +contract || 0;
-          updateStage(st.id, { name: name.trim(), budget: +budget || 0, contractAmount, startDate: start, endDate: end, duration });
+          // The contract sum follows the stage budget until the two were set apart (in setup there is no separate contract
+          // yet), so the contractor sees the amount the client actually set – it used to keep the template's number.
+          const contractAmount = setup || +contract === st.budget ? shekels(budget) : +contract || 0;
+          // "זמן עבודה" follows the dates when they changed (it stayed "שבוע" for a five-week stage)
+          const datesChanged = start !== st.startDate || end !== st.endDate;
+          const work = datesChanged ? durationLabel(start, end) || duration : duration;
+          updateStage(st.id, { name: name.trim(), budget: shekels(budget), contractAmount, startDate: start, endDate: end, duration: work });
           toast('השלב עודכן');
           nav(-1);
         }}
@@ -165,7 +168,15 @@ export function StageEdit() {
         <div className="space-y-4">
           <Field label="תאריך התחלה" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
           <Field label="תאריך סיום" type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
-          <Button block onClick={() => setDatesOpen(false)}>
+          <Button
+            block
+            onClick={() => {
+              setDatesOpen(false);
+              // setup shows the "זמן עבודה" field – fill it from the new dates
+              const label = durationLabel(start, end);
+              if (label && (start !== st.startDate || end !== st.endDate)) setDuration(label);
+            }}
+          >
             אישור
           </Button>
         </div>
@@ -198,7 +209,7 @@ export function StageNew() {
       <Heading title="הוספת שלב" sub="שלב חדש יתווסף בסוף לוח הזמנים" />
       <div className="space-y-5 px-6 short:space-y-3">
         <Field label="שם השלב" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: צבע וגמר" />
-        <Field label="תקציב" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="₪" />
+        <Field label="תקציב" inputMode="numeric" value={budget} onChange={(e) => setBudget(moneyInput(e.target.value))} placeholder="₪" />
         <Field label="זמן עבודה" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="לדוגמה: שבוע" />
       </div>
       <BottomActions>
@@ -206,7 +217,7 @@ export function StageNew() {
           block
           disabled={!name.trim()}
           onClick={() => {
-            addStage(name, +budget || 0, duration || '—');
+            addStage(name, shekels(budget), duration || '—');
             toast('השלב נוסף');
             nav(-1);
           }}
@@ -399,7 +410,12 @@ export function MemberForm() {
   const digits = phone.replace(/\D/g, '');
   // an Israeli mobile (WhatsApp) – the server refuses anything else, and in setup that used to stop the whole save
   const mobile = /^(0?5\d{8}|9725\d{8})$/.test(digits);
-  const valid = !!name.trim() && mobile && perm;
+  // one entry per phone: a second one used to replace the first on the server (role, permission and the link already sent)
+  const local = (p: string) => p.replace(/\D/g, '').replace(/^972/, '').replace(/^0/, '');
+  const own = mobile && local(phone) === local(s.user.phone);
+  const taken = mobile && s.members.some((m) => m.id !== existing?.id && !!m.phone && local(m.phone) === local(phone));
+  const phoneError = own ? 'זה המספר שלך' : taken ? 'המספר הזה כבר משותף בפרויקט' : '';
+  const valid = !!name.trim() && mobile && !!perm && !phoneError;
   // The link carries this member's own secret: opening it (and logging in with this phone) is what joins the project.
   // Made here, not by the server, so WhatsApp can open the moment "שמירה ושליחה" is pressed.
   const [token] = useState(() => existing?.inviteToken ?? newInviteToken());
@@ -432,7 +448,8 @@ export function MemberForm() {
       {/* Figma "iPhone 5 / 13 / 15": contacts link + name | permission + phone (16px apart), roles, photo link – groups 24px apart */}
       <div className="space-y-6 px-6">
         <div className="space-y-4">
-          {!existing && (
+          {/* the Contact Picker exists only in Android Chrome – elsewhere the link only said so */}
+          {!existing && 'contacts' in navigator && (
             <IconLink icon="contact" onClick={pickContact}>
               חפש ברשימת אנשי הקשר שלך
             </IconLink>
@@ -451,6 +468,7 @@ export function MemberForm() {
             />
           </div>
           <ClearField value={phone} onChange={setPhone} placeholder="מספר טלפון נייד" tel />
+          {phoneError && <p className="-mt-2 px-2 text-caption text-danger">{phoneError}</p>}
         </div>
         <div className="space-y-2">
           <p className="text-body">בחר את התפקיד המתאים:</p>
@@ -467,11 +485,15 @@ export function MemberForm() {
         <Button
           variant="outline"
           className="shrink-0 px-8"
+          // the link works only for a saved member: a new one is added here too (it used to copy a link to nobody)
+          disabled={!existing && !valid}
           onClick={() => {
+            if (!existing) saveMember({ name: name.trim(), phone, permission: perm!, role, avatar, inviteToken: token });
             navigator.clipboard?.writeText(inviteLink).then(
-              () => toast('הקישור הועתק'),
+              () => toast(existing ? 'הקישור הועתק' : `הקישור הועתק – ${name.trim()} נוסף/ה לשיתוף`),
               () => toast('לא ניתן להעתיק', 'info'),
             );
+            if (!existing) nav(-1);
           }}
         >
           העתק קישור

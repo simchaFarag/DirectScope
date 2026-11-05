@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { notFound } from '../lib/errors.js';
+import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { dateIn, fileRef, money, parse, today, param } from '../lib/http.js';
-import { roleTitle, toStage, toTask, toUpdate } from '../lib/serialize.js';
+import { authorTitle, toStage, toTask, toUpdate } from '../lib/serialize.js';
 import { me } from '../middleware/auth.js';
 import { access, requireBudget, requireEdit } from '../middleware/project.js';
 
@@ -63,13 +63,16 @@ stagesRouter.post('/stages', requireEdit, requireBudget, async (req, res) => {
   res.status(201).json(toStage(stage, a.seesBudget));
 });
 
+// The stage's money and dates are the client's plan. A contractor (restricted member) asks for a change through an
+// exception request (חריגה) or an update – editing the stage directly changed the plan without the client seeing it.
 stagesRouter.patch('/stages/:id', requireEdit, async (req, res) => {
   const a = access(req);
-  await findStage(a.project.id, param(req));
+  if (!a.seesBudget) throw forbidden('רק הלקוח יכול לערוך את השלב');
+  const before = await findStage(a.project.id, param(req));
   const { tasks: _ignored, ...data } = parse(stageInput.partial(), req.body);
-  // Contractors can't touch money: not the client's budget, and not the contract sum either – a change to the agreed
-  // amount goes through an exception request (חריגה) that the client approves.
-  if (!a.seesBudget) delete data.budget, delete data.paid, delete data.contractAmount;
+  // The contract sum starts equal to the budget. Until it is set apart on purpose, a budget change carries it along –
+  // otherwise the contractor keeps seeing the first number for good (the app has no separate field for it).
+  if (data.budget !== undefined && data.contractAmount === undefined && before.contractAmount === before.budget) data.contractAmount = data.budget;
   const stage = await prisma.stage.update({ where: { id: param(req) }, data, include: { tasks: true } });
   res.json(toStage(stage, a.seesBudget));
 });
@@ -87,8 +90,10 @@ stagesRouter.put('/stages/:id/tasks', requireEdit, async (req, res) => {
   let tasks = parse(z.array(taskInput).max(200), req.body);
   const known = new Set(stage.tasks.map((t) => t.id));
   if (!a.seesBudget) {
-    // A contractor may add, rename, reorder and remove tasks, but a task's status only changes through /complete –
-    // that is what creates the update the client approves.
+    // A contractor may add, rename and reorder tasks, but not remove them (dropping the open ones made a stage look
+    // finished), and a task's status only changes through /complete – that is what creates the update the client approves.
+    const sent = new Set(tasks.map((t) => t.id).filter(Boolean));
+    if (stage.tasks.some((t) => !sent.has(t.id))) throw forbidden('רק הלקוח יכול למחוק משימות');
     const before = new Map(stage.tasks.map((t) => [t.id, t]));
     tasks = tasks.map((t) => {
       const old = t.id ? before.get(t.id) : undefined;
@@ -121,20 +126,28 @@ stagesRouter.post('/stages/:id/tasks/:taskId/complete', requireEdit, async (req,
   if (!task) throw notFound('המשימה לא נמצאה');
   const { note, photo } = parse(z.object({ note: z.string().max(2000).optional(), photo: fileRef.optional() }), req.body ?? {});
 
-  // restricted = contractor / professional (see middleware/project.ts) – their completion waits for the client
+  // restricted = contractor / professional (see middleware/project.ts) – their completion waits for the client: the task
+  // stays "בתהליך" until the client approves the update (→ done) or rejects it (→ back to todo), see updates.ts.
   const contractor = !a.seesBudget;
   const documented = contractor || !!note || !!photo;
+  if (task.status === 'done') throw badRequest('המשימה כבר הושלמה');
+  if (contractor && (await prisma.update.count({ where: { taskId: task.id, status: 'pending' } })))
+    throw badRequest('המשימה כבר ממתינה לאישור הלקוח');
 
   const [updatedTask, update] = await prisma.$transaction(async (tx) => {
-    const t = await tx.task.update({ where: { id: task.id }, data: { status: 'done', note: note ?? null, photo: photo ?? null } });
+    const t = await tx.task.update({
+      where: { id: task.id },
+      data: { status: contractor ? 'inProgress' : 'done', note: note ?? null, photo: photo ?? null },
+    });
     const up = documented
       ? await tx.update.create({
           data: {
             projectId: a.project.id,
             stageId: stage.id,
+            taskId: task.id,
             authorId: u.id,
             authorName: `${u.firstName} ${u.lastName}`.trim(),
-            authorTitle: roleTitle(u.role),
+            authorTitle: authorTitle(u, a),
             avatar: u.avatar,
             text: `משימה הושלמה: ${task.title}${note ? ' — ' + note : ''}`,
             photos: photo ? [photo] : [],

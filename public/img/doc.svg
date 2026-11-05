@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- Neutral preview for a file that isn't an image (PDF / Word). Replaces doc.png, which showed internal text. -->
+  <rect width="120" height="120" fill="#F7F9FC"/>
+  <path d="M36 18h34l20 20v60a4 4 0 0 1-4 4H36a4 4 0 0 1-4-4V22a4 4 0 0 1 4-4z" fill="#fff" stroke="#C9DDF2" stroke-width="2"/>
+  <path d="M70 18v16a4 4 0 0 0 4 4h16" fill="none" stroke="#C9DDF2" stroke-width="2"/>
+  <g stroke="#3EA5F4" stroke-width="3" stroke-linecap="round" opacity=".55">
+    <path d="M44 52h32"/>
+    <path d="M44 62h32"/>
+    <path d="M44 72h32"/>
+    <path d="M44 82h20"/>
+  </g>
+</svg>

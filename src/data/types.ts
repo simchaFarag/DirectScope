@@ -118,6 +118,8 @@ export interface Update {
   date?: string;
   status: 'pending' | 'approved' | 'rejected';
   rejectReason?: string;
+  /** a task completion: approving marks the task done, rejecting reopens it */
+  taskId?: string;
   comments: Comment[];
 }
 

@@ -1,6 +1,6 @@
 import { Plus } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { StageTabs, SubScreen, TabScreen, Heading } from '@/components/layout';
 import { Icon } from '@/components/FigmaIcon';
 import { AvatarStack, VDivider, BottomActions, Button, IconButton, Modal, PhotoSourceButtons, ProgressBar, Ring, SectionTitle, TextArea, UploadSlot } from '@/components/ui';
@@ -83,7 +83,7 @@ export function Schedule() {
             <VDivider />
             <div className="flex flex-col gap-1.5">
               <p>סיום (משוער)</p>
-              <p className="text-btn font-medium tracking-[0.042px] text-primary">{fmtDate(s.project.endDate)}</p>
+              <p className="text-btn font-medium tracking-[0.042px] text-primary">{fmtDate(t.endDate)}</p>
             </div>
             <VDivider />
             <div className="flex flex-col gap-1.5">
@@ -133,10 +133,15 @@ export function StageSchedule() {
   const perms = usePerms();
   const [openNote, setOpenNote] = useState<string>();
   const [completing, setCompleting] = useState<Task>();
+  const toast = useToast();
 
   if (stageId === 'extras') return <ExtrasTab base="/app/schedule" />;
   const st = s.stages.find((x) => x.id === stageId);
-  if (!st) return null;
+  // an old bookmark / a stage that was deleted: back to the schedule instead of an empty white page
+  if (!st) return <Navigate to="/app/schedule" replace />;
+  // a contractor's completion that waits for the client can't be sent again
+  const waiting = new Set(s.updates.filter((u) => u.status === 'pending' && u.taskId).map((u) => u.taskId));
+  const openTask = (t: Task) => (waiting.has(t.id) ? toast('המשימה ממתינה לאישור הלקוח', 'info') : setCompleting(t));
   const p = stageProgress(st);
   const days = Math.max(0, Math.ceil((new Date(st.endDate).getTime() - Date.now()) / 86400000));
   const updates = s.updates.filter((u) => u.stageId === st.id);
@@ -170,7 +175,8 @@ export function StageSchedule() {
               </div>
             </div>
           </div>
-          {perms.canEdit && (
+          {/* a contractor asks for a date / money change through an update or an exception – the stage plan is the client's */}
+          {perms.canEdit && perms.seesBudget && (
             <Button variant="outline" onClick={() => nav(`/app/stage/${st.id}/edit`)}>
               עריכת שלב
             </Button>
@@ -185,7 +191,7 @@ export function StageSchedule() {
               </SmallIconButton>
             )}
           </SectionHead>
-          <TaskTimeline tasks={st.tasks} onTask={perms.canEdit ? setCompleting : undefined} />
+          <TaskTimeline tasks={st.tasks} onTask={perms.canEdit ? openTask : undefined} />
           <TaskCompleteModal stageId={st.id} task={completing} onClose={() => setCompleting(undefined)} />
         </section>
 
@@ -353,7 +359,8 @@ export function TasksEdit() {
   const [completing, setCompleting] = useState<Task>();
   // a contractor's task status changes only by completing it (→ an update the client approves); the server enforces it
   const statusLocked = !usePerms().seesBudget;
-  if (!st) return null;
+  if (!st) return <Navigate to="/app/schedule" replace />;
+  const waiting = new Set(s.updates.filter((u) => u.status === 'pending' && u.taskId).map((u) => u.taskId));
   const tasks = st.tasks;
   const set = (next: Task[]) => setTasks(st.id, next);
 
@@ -364,6 +371,8 @@ export function TasksEdit() {
   };
   const rename = (id: string, title: string) => {
     setEditing(undefined);
+    // clearing the name deletes the task – except for a contractor, who can't remove tasks (the server refuses it)
+    if (!title.trim() && statusLocked) return;
     set(title.trim() ? tasks.map((x) => (x.id === id ? { ...x, title: title.trim() } : x)) : tasks.filter((x) => x.id !== id));
   };
   const addPhoto = (t: Task) => pickImages({ capture: true }).then(([photo]) => photo && set(tasks.map((x) => (x.id === t.id ? { ...x, photo } : x))));
@@ -392,7 +401,7 @@ export function TasksEdit() {
                     )}
                   >
                     <button
-                      onClick={() => (t.status !== 'done' ? setCompleting(t) : !statusLocked && set(tasks.map((x) => (x.id === t.id ? { ...x, status: 'todo' } : x))))}
+                      onClick={() => (t.status !== 'done' ? (waiting.has(t.id) ? toast('המשימה ממתינה לאישור הלקוח', 'info') : setCompleting(t)) : !statusLocked && set(tasks.map((x) => (x.id === t.id ? { ...x, status: 'todo' } : x))))}
                       className="grid h-6 w-6 shrink-0 place-items-center"
                       aria-label={t.status === 'done' ? 'החזרה לביצוע' : 'סימון כבוצע'}
                     >
@@ -423,9 +432,11 @@ export function TasksEdit() {
                       <button onClick={() => setEditing(t.id)} className="grid h-6 w-6 place-items-center" aria-label="עריכה">
                         <Icon name="sEdit" />
                       </button>
-                      <button onClick={() => set(tasks.filter((x) => x.id !== t.id))} className="grid h-6 w-6 place-items-center" aria-label="מחיקה">
-                        <Icon name="delete" size={16} />
-                      </button>
+                      {!statusLocked && (
+                        <button onClick={() => set(tasks.filter((x) => x.id !== t.id))} className="grid h-6 w-6 place-items-center" aria-label="מחיקה">
+                          <Icon name="delete" size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

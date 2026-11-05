@@ -13,3 +13,4 @@ export const unauthorized = (msg = 'נדרשת התחברות') => new HttpError
 export const forbidden = (msg = 'אין הרשאה לפעולה זו') => new HttpError(403, msg, 'forbidden');
 export const notFound = (msg = 'לא נמצא') => new HttpError(404, msg, 'not_found');
 export const tooMany = (msg = 'יותר מדי בקשות, נסו שוב בעוד רגע') => new HttpError(429, msg, 'rate_limited');
+export const conflict = (msg = 'הרשומה כבר קיימת', code = 'conflict') => new HttpError(409, msg, code);

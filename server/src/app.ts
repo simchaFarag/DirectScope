@@ -39,7 +39,15 @@ export function createApp() {
   app.use('/api/invites', invitesRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/uploads', uploadsRouter);
-  app.use('/uploads', express.static(config.uploadDir, { maxAge: '30d', immutable: true, index: false }));
+  // Receipts and contracts: the browser may keep them, shared caches / proxies may not (was "public").
+  // Still reachable by anyone holding the (random, 128-bit) url – signed short-lived links are the full fix.
+  app.use(
+    '/uploads',
+    express.static(config.uploadDir, {
+      index: false,
+      setHeaders: (res) => res.setHeader('Cache-Control', 'private, max-age=2592000, immutable'),
+    }),
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { crud } from '../lib/crud.js';
 import { dateIn, fileRef, optionalStage, today } from '../lib/http.js';
+import { QUOTE_DOCS_HIDDEN } from '../lib/quotes.js';
 import { toContact, toDocument, toGallery, toInspiration, toReminder } from '../lib/serialize.js';
 
 export const archiveRouter = Router();
@@ -25,6 +26,7 @@ crud(archiveRouter, '/documents', {
     preview: fileRef.nullish(),
   }),
   prepare: (d) => ({ ...d, date: d.date ?? today() }),
+  scope: (a) => (a.seesBudget ? {} : QUOTE_DOCS_HIDDEN),
   map: toDocument,
 });
 

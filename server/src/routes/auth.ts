@@ -22,7 +22,16 @@ const hash = (phone: string, code: string) => crypto.createHmac('sha256', config
 export const authRouter = Router();
 
 // per-IP guard on top of the per-phone limits below
-authRouter.use(rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false }));
+// (JSON in our error shape – the default plain-text English reply showed in the app as "no connection to the server")
+authRouter.use(
+  rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: { code: 'rate_limited', message: 'יותר מדי ניסיונות כניסה, נסו שוב בעוד כמה דקות' } },
+  }),
+);
 
 /** login-1: send a 6-digit code to the phone */
 authRouter.post('/otp/request', async (req, res) => {

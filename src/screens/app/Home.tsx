@@ -10,7 +10,8 @@ export function Home() {
   const nav = useNavigate();
   const { s } = useStore();
   const t = useTotals();
-  const isContractor = !usePerms().seesBudget;
+  const { seesBudget, canApprove } = usePerms();
+  const isContractor = !seesBudget;
   // may be undefined: a project can have no stages yet (this used to crash the whole screen)
   const current: Stage | undefined = s.stages.find((st) => stageProgress(st) < 100) ?? s.stages[s.stages.length - 1];
   const doneStage = [...s.stages].reverse().find((st) => stageProgress(st) === 100);
@@ -19,7 +20,7 @@ export function Home() {
   const daily = s.updates.filter((u) => u.photo && u.status === 'approved').slice(0, 5);
   // the project's own latest files: documents (their preview) and gallery photos, newest first
   const recent = [
-    ...s.docs.map((d) => ({ key: `d${d.id}`, date: d.date, src: d.preview ?? '/img/doc.png', to: `/app/doc/${d.id}`, label: d.title })),
+    ...s.docs.map((d) => ({ key: `d${d.id}`, date: d.date, src: d.preview ?? '/img/doc.svg', to: `/app/doc/${d.id}`, label: d.title })),
     ...s.gallery.filter((g) => g.image).map((g) => ({ key: `g${g.id}`, date: g.date, src: g.image!, to: '/app/archive/gallery', label: g.title })),
   ]
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -133,7 +134,7 @@ export function Home() {
               <img src="/img/stage-warning.svg" alt="" className="relative h-12 w-[39px]" />
               <div className="relative min-w-0 whitespace-nowrap">
                 <p className="truncate text-body">{s.stages.find((st) => st.id === pendingEx.stageId)?.name}</p>
-                <p className="text-body text-muted">{isContractor ? 'ממתין לאישור הלקוח' : 'שינוי מחכה לאישורך'}</p>
+                <p className="text-body text-muted">{canApprove ? 'שינוי מחכה לאישורך' : 'ממתין לאישור הלקוח'}</p>
               </div>
               <Icon name="gettin" className="relative mr-auto" />
             </button>
@@ -155,7 +156,8 @@ export function Home() {
         <section className="flex flex-col gap-2.5 py-4 lg:col-start-2 lg:row-start-3 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)] xl:col-start-3">
           <div className="flex items-center justify-between">
             <span className="flex h-6 items-center rounded bg-bg px-2 text-caption">מסמכים אחרונים</span>
-            <button onClick={() => nav('/app/archive/gallery')} className="text-body leading-4 tracking-[0.042px] underline">
+            {/* a new project has documents but no photos yet: open where the files are */}
+            <button onClick={() => nav(s.gallery.some((g) => g.image) ? '/app/archive/gallery' : '/app/archive/docs')} className="text-body leading-4 tracking-[0.042px] underline">
               צפייה בגלריה
             </button>
           </div>

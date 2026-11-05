@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import type { Project } from '@prisma/client';
+import type { MemberRole, Project } from '@prisma/client';
 import { prisma } from '../db.js';
 import { forbidden, notFound } from '../lib/errors.js';
 import { me } from './auth.js';
@@ -17,6 +17,8 @@ export interface Access {
    * "בעל מקצוע", and anyone registered as a contractor. Restricted members also can't touch money fields or approve.
    */
   seesBudget: boolean;
+  /** the role the owner gave this member when inviting them (undefined for the owner) */
+  memberRole?: MemberRole;
 }
 
 /** Projects the user owns or has joined (a linked membership – a phone number alone grants nothing). */
@@ -57,6 +59,7 @@ export async function loadProject(req: Request, _res: Response, next: NextFuncti
     canEdit,
     canApprove: canEdit && !restricted,
     seesBudget: !restricted,
+    memberRole: member.role,
   };
   next();
 }
