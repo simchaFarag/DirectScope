@@ -40,7 +40,8 @@ export function AppBar({ title, home, menuOnly }: { title?: string; home?: boole
     <>
       {/* Figma "App Bar": Default (home) / inside (white + title) / only menu (light + shadow) */}
       {/* Desktop: one white bar – menu + logo + project, the four tabs in the middle, alerts + profile on the left */}
-      <header className={cn('sticky top-0 z-30 flex h-[88px] items-end gap-4 px-[10px] text-ink lg:h-[72px] lg:items-center lg:bg-white lg:px-10 lg:pb-0 lg:shadow-sm4', home ? 'bg-bg' : menuOnly ? 'bg-bg shadow-sm4' : 'bg-white shadow-sm4')}>
+      {/* Mobile: Figma's 88px includes a 44px mock status bar – in a browser only the real safe-area inset is added */}
+      <header className={cn('sticky top-0 z-30 flex h-[calc(56px+env(safe-area-inset-top))] items-end gap-4 pb-1 px-[10px] text-ink lg:h-[72px] lg:items-center lg:bg-white lg:px-10 lg:pb-0 lg:shadow-sm4', home ? 'bg-bg' : menuOnly ? 'bg-bg shadow-sm4' : 'bg-white shadow-sm4')}>
         <button onClick={() => setOpen(true)} aria-label="תפריט" className="grid h-12 w-12 shrink-0 place-items-center">
           <Icon name="menu" />
         </button>
