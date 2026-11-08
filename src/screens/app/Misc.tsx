@@ -1,6 +1,6 @@
 import { ImagePlus } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/data/remote';
@@ -150,7 +150,7 @@ function CreditCardArt({ last4 }: { last4: string }) {
         <span>XXXX</span>
         <span>XXXX</span>
         <span>XXXX</span>
-        <span>{last4}</span>
+        <span>{last4 || 'XXXX'}</span>
       </p>
     </div>
   );
@@ -182,7 +182,8 @@ export function Payment() {
           </div>
           <div className="flex w-full flex-col items-center gap-10">
             <CreditCardArt last4={card} />
-            <section className="flex w-full flex-col gap-2 rounded-lg bg-white p-4">
+            {/* the subscription card only for someone who has one – a new user saw a monthly charge they never agreed to */}
+            {card && <section className="flex w-full flex-col gap-2 rounded-lg bg-white p-4">
               <div className="flex items-start justify-between">
                 <span className={cn('flex h-4 items-center rounded-lg px-2 text-caption', cancelled ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success-dark')}>{cancelled ? 'המנוי בוטל' : 'מנוי חודשי'}</span>
                 <span className="text-body text-muted">{cancelled ? 'לא יתחדש' : 'מתחדש אוטומטית'}</span>
@@ -197,16 +198,16 @@ export function Payment() {
                   <p className="text-lg font-semibold leading-5">₪ 64</p>
                 </div>
               </div>
-            </section>
+            </section>}
           </div>
         </div>
         <div className="flex flex-col items-center gap-6">
           <Button block onClick={() => setOpen(true)}>
-            שנה כרטיס אשראי
+            {card ? 'שנה כרטיס אשראי' : 'הוספת כרטיס אשראי'}
           </Button>
-          <button onClick={() => (cancelled ? setCancelled(false) : setConfirmCancel(true))} className="flex h-8 items-center px-4 text-body leading-4 tracking-[0.042px] text-muted underline">
+          {card && <button onClick={() => (cancelled ? setCancelled(false) : setConfirmCancel(true))} className="flex h-8 items-center px-4 text-body leading-4 tracking-[0.042px] text-muted underline">
             {cancelled ? 'חידוש מנוי' : 'ביטול מנוי'}
-          </button>
+          </button>}
         </div>
         <ConfirmDialog
           open={confirmCancel}
@@ -305,7 +306,7 @@ export function ProfileScreen() {
           {s.user.firstName} {s.user.lastName}
         </p>
         <p className="text-caption text-muted">
-          {roleTitle(s.user.role)} · <span dir="ltr">+972 {s.user.phone}</span>
+          {roleTitle(s.user.role, s.user.gender)} · <span dir="ltr">+972 {s.user.phone}</span>
         </p>
       </div>
       <Heading title="עריכת פרטים אישיים" />

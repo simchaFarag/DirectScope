@@ -21,20 +21,18 @@ const hash = (phone: string, code: string) => crypto.createHmac('sha256', config
 
 export const authRouter = Router();
 
-// per-IP guard on top of the per-phone limits below
-// (JSON in our error shape – the default plain-text English reply showed in the app as "no connection to the server")
-authRouter.use(
-  rateLimit({
-    windowMs: 15 * 60_000,
-    limit: 30,
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    message: { error: { code: 'rate_limited', message: 'יותר מדי ניסיונות כניסה, נסו שוב בעוד כמה דקות' } },
-  }),
-);
+// Per-IP guard on top of the per-phone limits below, on the code routes only: logout used to share it, and a 429 there
+// left the session open for 30 days. (JSON in our error shape – the default plain-text reply showed as "no connection".)
+const loginLimit = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: { code: 'rate_limited', message: 'יותר מדי ניסיונות כניסה, נסו שוב בעוד כמה דקות' } },
+});
 
 /** login-1: send a 6-digit code to the phone */
-authRouter.post('/otp/request', async (req, res) => {
+authRouter.post('/otp/request', loginLimit, async (req, res) => {
   const { phone: raw } = parse(z.object({ phone: z.string() }), req.body);
   const phone = normalizePhone(raw);
 
@@ -53,7 +51,7 @@ authRouter.post('/otp/request', async (req, res) => {
 });
 
 /** login-2: verify the code → JWT. New phones get a user row; pending invitations for the phone are linked. */
-authRouter.post('/otp/verify', async (req, res) => {
+authRouter.post('/otp/verify', loginLimit, async (req, res) => {
   const body = parse(z.object({ phone: z.string(), code: z.string().regex(/^\d{6}$/, 'קוד בן 6 ספרות') }), req.body);
   const phone = normalizePhone(body.phone);
 

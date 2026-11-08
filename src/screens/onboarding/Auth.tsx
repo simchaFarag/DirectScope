@@ -1,13 +1,14 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { BottomActions, Button, ClearField, Radio } from '@/components/ui';
 import { Icon, type IconName } from '@/components/FigmaIcon';
 import { Heading, SubScreen } from '@/components/layout';
 import { INVITE_KEY, useStore } from '@/data/store';
 import { errorText, serverUnavailable } from '@/data/remote';
 import { useToast } from '@/components/toast';
-import { auth, getToken } from '@/lib/api';
+import { api, auth, getToken } from '@/lib/api';
 import type { Role, User } from '@/data/types';
 import { pickImages } from '@/lib/files';
 import { cn } from '@/lib/format';
@@ -67,6 +68,23 @@ export function Splash() {
   );
 }
 
+type InviteInfo = { projectName: string; invitedBy: string };
+
+/** Who invited this device's pending invite link, and to what (null without a link or when it isn't found). */
+function useInviteInfo() {
+  const [info, setInfo] = useState<InviteInfo | null>(null);
+  useEffect(() => {
+    let t: string | null = null;
+    try {
+      t = localStorage.getItem(INVITE_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    if (t) api.get<InviteInfo>(`/invites/info?t=${encodeURIComponent(t)}`).then(setInfo, () => {});
+  }, []);
+  return info;
+}
+
 /** login-step 1 */
 export function PhoneLogin() {
   const nav = useNavigate();
@@ -75,6 +93,8 @@ export function PhoneLogin() {
   // empty on the deployed site (the Figma number is a sample); the dev demo keeps it prefilled for convenience
   const [phone, setPhone] = useState(() => loginPhone.get() || (import.meta.env.DEV ? s.user.phone : ''));
   const [busy, setBusy] = useState(false);
+  // opened from a WhatsApp invite: say what it's for (the link used to land here without a word about the project)
+  const invite = useInviteInfo();
   const valid = /^0?5\d{8}$/.test(phone.replace(/\D/g, ''));
   const submit = async () => {
     if (!valid || busy) return;
@@ -94,11 +114,14 @@ export function PhoneLogin() {
   };
   return (
     <SubScreen title="הרשמה / כניסה לחשבון" onBack={() => nav('/')}>
-      <Heading title="מה מספר הטלפון שלך?" sub="יישלח אליך קוד אימות לאישור המספר" />
+      <Heading
+        title="מה מספר הטלפון שלך?"
+        sub={invite ? `${invite.invitedBy ? `${invite.invitedBy} הזמין/ה אותך` : 'הוזמנת'} לפרויקט "${invite.projectName}". נאמת את המספר ונצרף אותך` : 'יישלח אליך קוד אימות לאישור המספר'}
+      />
       {/* Figma: 48px number field (+972, number, clear) with the Israeli flag pill on its left; the note 24px below */}
       <div className="flex flex-col gap-6 px-6">
         <div className="flex items-center gap-2">
-          <ClearField value={phone} onChange={(v) => setPhone(v.replace(/[^\d]/g, '').slice(0, 10))} placeholder="527683159" tel autoFocus onEnter={submit} className="h-12 flex-1" />
+          <ClearField value={phone} onChange={(v) => setPhone(v.replace(/[^\d]/g, '').slice(0, 10))} placeholder="501234567" tel autoFocus onEnter={submit} className="h-12 flex-1" />
           <span className="flex h-10 shrink-0 items-center rounded-full border border-primary-100 px-2" aria-label="ישראל +972">
             <Icon name="down" />
             <span className="grid w-10 place-items-center">
@@ -260,15 +283,17 @@ export function Invite() {
 }
 
 /** Transitional success / loading screens (Frame 1000005822 / 37 / 38) */
-export function Interstitial({ text, next, bg, loading, delay = 1600 }: { text: string; next: string; bg: string; loading?: boolean; delay?: number }) {
+export function Interstitial({ text, next, loading, delay = 1600 }: { text: string; next: string; loading?: boolean; delay?: number }) {
   const nav = useNavigate();
   useEffect(() => {
     const t = setTimeout(() => nav(next, { replace: true }), delay);
     return () => clearTimeout(t);
   }, [nav, next, delay]);
-  // Figma: the previous screen dimmed (#A2A9B7 at 70%); success = white pill near the top, loading = small centred card
+  // Figma: the previous screen dimmed (#A2A9B7 at 70%); success = white pill near the top, loading = small centred card.
+  // The dimmed screen used to be a picture of the Figma frame – with an iPhone status bar, a real person's phone number
+  // and the code 123456 – so a plain dimmed page stands in for it.
   return (
-    <div className="relative flex flex-1 flex-col items-center overflow-hidden bg-cover bg-top px-6" style={{ backgroundImage: `url(${bg})` }}>
+    <div className="relative flex flex-1 flex-col items-center overflow-hidden bg-white px-6">
       <div className="absolute inset-0 bg-[rgba(162,169,183,0.7)]" />
       {loading ? (
         <div className="animate-fade-up relative my-auto flex w-[242px] flex-col items-center overflow-hidden rounded-lg bg-white shadow-blue">
@@ -359,7 +384,13 @@ export function Profile() {
               return toast(errorText(e), 'info');
             }
             // invited to a project (joined at login) → straight to it; otherwise set up their own
-            nav(s.remote?.projectId ? '/app/home' : '/setup/details', { replace: !!s.remote?.projectId });
+            if (s.remote?.projectId) return nav('/app/home', { replace: true });
+            // invited, but logged in without opening the link: say where to join, rather than only offering a project of
+            // their own (an invited spouse could set up a second copy of the project)
+            const pending = getToken() ? await api.get<InviteInfo[]>('/invites/pending').catch(() => []) : [];
+            if (pending.length)
+              toast(`הוזמנת לפרויקט "${pending[0].projectName}". כדי להצטרף, פתח/י את קישור ההזמנה שקיבלת בוואטסאפ`, 'info', 10000);
+            nav('/setup/details');
           }}
         >
           התחל

@@ -1,7 +1,8 @@
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { Icon } from '@/components/FigmaIcon';
 import { useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { Avatar, BottomActions, Button, ConfirmDialog, Lightbox, Modal, PhotoPicker, Select, TextArea } from '@/components/ui';

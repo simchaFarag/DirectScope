@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import { config } from '../config.js';
 import { badRequest } from '../lib/errors.js';
+import { signFile } from '../lib/files.js';
 import { me, requireAuth } from '../middleware/auth.js';
 
 const ALLOWED: Record<string, string> = {
@@ -94,7 +95,8 @@ uploadsRouter.post('/', requireAuth, perUser, upload.array('files', MAX_FILES), 
 
   res.status(201).json(
     files.map((f) => ({
-      url: `/uploads/${path.relative(config.uploadDir, f.path).split(path.sep).join('/')}`,
+      // signed so the app can show it right away; the signature is dropped again when the url is saved (fileRef)
+      url: signFile(`/uploads/${path.relative(config.uploadDir, f.path).split(path.sep).join('/')}`),
       // multer decodes the original name as latin1; browsers send utf-8 (Hebrew file names)
       name: Buffer.from(f.originalname, 'latin1').toString('utf8'),
       size: f.size,

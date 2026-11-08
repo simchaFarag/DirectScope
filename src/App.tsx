@@ -1,5 +1,6 @@
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { getToken } from '@/lib/api';
+import { usePerms } from '@/data/store';
 import { AppLayout } from '@/components/layout';
 import { Interstitial, Invite, Otp, PhoneLogin, Profile, Splash } from '@/screens/onboarding/Auth';
 import { BudgetSplit, CheckResults, ProjectDetails, UploadDocs } from '@/screens/onboarding/Setup';
@@ -82,6 +83,16 @@ function RequireLogin() {
   return import.meta.env.DEV || getToken() ? <Outlet /> : <Navigate to="/" replace />;
 }
 
+/**
+ * Forms the member's access doesn't allow, opened by their address: back to the app instead of a form whose save the
+ * server refuses (after the screen already said "saved"). `client` = changes to money, stages, project details, sharing.
+ */
+function RequirePerm({ client, owner }: { client?: boolean; owner?: boolean }) {
+  const p = usePerms();
+  const ok = p.canEdit && (!client || p.seesBudget) && (!owner || p.isOwner);
+  return ok ? <Outlet /> : <Navigate to="/app/home" replace />;
+}
+
 /** Unknown address: a logged-in user goes to the app, not back to the "מתחילים" welcome screen. */
 function NotFound() {
   return <Navigate to={getToken() ? '/app/home' : '/'} replace />;
@@ -100,15 +111,15 @@ export default function App() {
         {/* Login */}
         <Route path="/login/phone" element={<PhoneLogin />} />
         <Route path="/login/otp" element={<Otp />} />
-        <Route path="/login/verified" element={<Interstitial text="האימות בוצע בהצלחה!" next="/login/profile" bg="/img/bg-verified.png" />} />
+        <Route path="/login/verified" element={<Interstitial text="האימות בוצע בהצלחה!" next="/login/profile" />} />
         <Route element={<RequireLogin />}>
         <Route path="/login/profile" element={<Profile />} />
 
         {/* Project setup */}
         <Route path="/setup/details" element={<ProjectDetails />} />
         <Route path="/setup/docs" element={<UploadDocs />} />
-        <Route path="/setup/checking" element={<Interstitial loading text="בבדיקה. בונים לך משהו טוב :)" next="/setup/checked" bg="/img/bg-check.png" delay={2200} />} />
-        <Route path="/setup/checked" element={<Interstitial text="הבדיקה בוצעה בהצלחה!" next="/setup/results" bg="/img/bg-check.png" />} />
+        <Route path="/setup/checking" element={<Interstitial loading text="בבדיקה. בונים לך משהו טוב :)" next="/setup/checked" delay={2200} />} />
+        <Route path="/setup/checked" element={<Interstitial text="הבדיקה בוצעה בהצלחה!" next="/setup/results" />} />
         <Route path="/setup/results" element={<CheckResults />} />
         <Route path="/setup/budget" element={<BudgetSplit />} />
         <Route path="/setup/expense" element={<ExpenseForm />} />
@@ -134,21 +145,27 @@ export default function App() {
         <Route path="/app/doc/:id" element={<FileViewer kind="doc" />} />
         <Route path="/app/receipts/:id" element={<FileViewer kind="receipt" />} />
         <Route path="/app/contact/:id" element={<ContactPage />} />
-        <Route path="/app/project/edit" element={<ProjectEdit />} />
         <Route path="/app/updates" element={<UpdatesScreen />} />
-        <Route path="/app/updates/new" element={<UpdateForm />} />
-        <Route path="/app/reminder/new" element={<ReminderForm />} />
         <Route path="/app/exceptions" element={<ExceptionsScreen />} />
-        <Route path="/app/exceptions/new" element={<ExceptionForm />} />
-        <Route path="/app/receipt/new" element={<ReceiptForm />} />
-        <Route path="/app/expense/new" element={<ExpenseForm />} />
-        <Route path="/app/expense/:id" element={<ExpenseForm />} />
-        <Route path="/app/stage/new" element={<StageNew />} />
-        <Route path="/app/stage/:id/edit" element={<StageEdit />} />
-        <Route path="/app/inspiration/upload" element={<InspirationUpload />} />
         <Route path="/app/share" element={<ShareList />} />
-        <Route path="/app/share/new" element={<MemberForm />} />
-        <Route path="/app/share/:id" element={<MemberForm />} />
+        <Route element={<RequirePerm />}>
+          <Route path="/app/updates/new" element={<UpdateForm />} />
+          <Route path="/app/reminder/new" element={<ReminderForm />} />
+          <Route path="/app/exceptions/new" element={<ExceptionForm />} />
+          <Route path="/app/inspiration/upload" element={<InspirationUpload />} />
+        </Route>
+        <Route element={<RequirePerm client />}>
+          <Route path="/app/project/edit" element={<ProjectEdit />} />
+          <Route path="/app/receipt/new" element={<ReceiptForm />} />
+          <Route path="/app/expense/new" element={<ExpenseForm />} />
+          <Route path="/app/expense/:id" element={<ExpenseForm />} />
+          <Route path="/app/stage/new" element={<StageNew />} />
+          <Route path="/app/stage/:id/edit" element={<StageEdit />} />
+        </Route>
+        <Route element={<RequirePerm owner />}>
+          <Route path="/app/share/new" element={<MemberForm />} />
+          <Route path="/app/share/:id" element={<MemberForm />} />
+        </Route>
         <Route path="/app/payment" element={<Payment />} />
         <Route path="/app/help" element={<Help />} />
         <Route path="/app/terms" element={<Terms />} />

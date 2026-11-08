@@ -1,6 +1,7 @@
 import { ChevronRight, CreditCard, FileText, Headphones, LogOut, UserCircle2, Users, X } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { useStore } from '@/data/store';
 import { cn } from '@/lib/format';
 import { Icon, type IconName } from './FigmaIcon';

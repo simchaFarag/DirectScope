@@ -5,6 +5,8 @@ export type ProjectType = 'renovation' | 'addition' | 'newHome' | 'other';
 export type StageIcon = 'general' | 'demolition' | 'plumbing' | 'electric' | 'ceramic' | 'extras';
 
 export interface User {
+  /** the account id (from the server; missing in the local demo) */
+  id?: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -38,6 +40,8 @@ export interface Member {
 
 export interface Contact {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   name: string;
   title: string;
   phone: string;
@@ -92,6 +96,8 @@ export interface Receipt {
 
 export interface ShoppingItem {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   stageId: string;
   title: string;
   done: boolean;
@@ -140,6 +146,8 @@ export interface ExceptionReq {
 
 export interface Reminder {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   stageId: string;
   text: string;
   color: 'yellow' | 'blue';
@@ -147,6 +155,8 @@ export interface Reminder {
 
 export interface DocItem {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   stageId: string;
   title: string;
   date: string;
@@ -158,6 +168,8 @@ export interface DocItem {
 
 export interface GalleryItem {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   title: string;
   date: string;
   image?: string;
@@ -165,6 +177,8 @@ export interface GalleryItem {
 
 export interface Inspiration {
   id: string;
+  /** who added it (server) – a contractor may change or remove only their own */
+  authorId?: string;
   title: string;
   image?: string;
 }

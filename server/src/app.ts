@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { config } from './config.js';
 import { pingDb } from './db.js';
+import { requireSignedFile } from './lib/files.js';
 import { logger } from './logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter } from './routes/auth.js';
@@ -39,10 +40,11 @@ export function createApp() {
   app.use('/api/invites', invitesRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/uploads', uploadsRouter);
-  // Receipts and contracts: the browser may keep them, shared caches / proxies may not (was "public").
-  // Still reachable by anyone holding the (random, 128-bit) url – signed short-lived links are the full fix.
+  // Receipts and contracts: only through the signed links the API hands to project members (lib/files.ts).
+  // The browser may keep them, shared caches / proxies may not.
   app.use(
     '/uploads',
+    requireSignedFile,
     express.static(config.uploadDir, {
       index: false,
       setHeaders: (res) => res.setHeader('Cache-Control', 'private, max-age=2592000, immutable'),

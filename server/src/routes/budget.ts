@@ -33,6 +33,9 @@ crud(budgetRouter, '/shopping', {
     photo: fileRef.nullish(),
   }),
   map: toShopping,
+  authored: true,
+  // everyone working on the stage may tick items off, also the client's
+  sharedFields: ['done'],
 });
 
 // Receipts change the stage's "paid" total, so they get their own routes instead of the generic ones.

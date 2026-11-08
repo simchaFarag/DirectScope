@@ -1,16 +1,17 @@
 export const ils = (n: number) => `₪ ${Math.round(n).toLocaleString('en-US')}`;
 
 /**
- * Amount fields keep what was typed, decimal point included ("12500.75"); the amount saved is whole shekels (shekels()).
- * Stripping every non-digit used to glue the agorot on and multiply the amount by 100 (12500.75 → ₪1,250,075).
- * Commas, spaces and ₪ are dropped (pasted "12,500" stays 12500). Max 9 whole digits – the server caps amounts at ₪1B.
+ * Amount fields take whole shekels – amounts are saved without agorot, and "12,500.50" used to be saved as 12,501 without
+ * a word. A typed decimal point stays visible but nothing is added after it, so it's clear agorot aren't taken.
+ * (Dropping only the point would glue the agorot on and multiply the amount by 100: 12500.75 → ₪1,250,075.)
+ * Commas, spaces and ₪ are dropped (pasted "12,500" stays 12500). Max 9 digits – the server caps amounts at ₪1B.
  */
 export function moneyInput(v: string) {
   const [int = '', ...rest] = v.replace(/[^\d.]/g, '').split('.');
-  return int.slice(0, 9) + (rest.length ? '.' + rest.join('').slice(0, 2) : '');
+  return int.slice(0, 9) + (rest.length ? '.' : '');
 }
 
-/** The amount to save from a money field: rounded to whole shekels (12500.75 → 12501). */
+/** The amount to save from a money field (whole shekels). */
 export const shekels = (v: string) => Math.round(Number(v) || 0);
 
 /** Money field shown as "₪ 12,500" while typing, keeping a decimal part that is being typed ("₪ 12,500.7"). */

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useToast } from '@/components/toast';
-import { api, auth, getToken } from '@/lib/api';
+import { api, ApiError, auth, getToken } from '@/lib/api';
 import * as mock from './mock';
 import { clean, errorText, fromServer, serverUnavailable, type Access, type ServerState } from './remote';
 import type {
@@ -95,6 +95,8 @@ const blank = (): State => {
     endDate: shiftDate(st.endDate, days),
     tasks: st.tasks.map((t) => ({ ...t, status: 'todo', note: undefined, photo: undefined })),
   })),
+  // no card / subscription yet (the demo's "XXXX 1234" and next charge used to show for every new user)
+  subscription: { cardLast4: '', cancelled: false },
   extras: [],
   receipts: [],
   shopping: [],
@@ -115,6 +117,8 @@ const KEY = 'directscope.state.v3';
 const LAST_PROJECT = 'directscope.lastProject';
 /** token from an invite link (/invite?t=…), kept until the user logs in and it's accepted */
 export const INVITE_KEY = 'directscope.invite';
+/** when that link was first opened – a link that isn't active yet is kept and retried for a few days */
+const INVITE_AT = 'directscope.inviteAt';
 const stored = {
   get: (k: string) => {
     try {
@@ -133,6 +137,25 @@ const stored = {
   },
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+/** Days in a typed "זמן עבודה": יום / 5 ימים / שבוע / שבועיים / 3 שבועות / חודש / 2 חודשים (a week when unclear) */
+function durationDays(text: string) {
+  const n = Number(text.match(/\d+/)?.[0]) || 1;
+  if (/שבועיים/.test(text)) return 14;
+  if (/חודשיים/.test(text)) return 60;
+  if (/שבוע/.test(text)) return 7 * n;
+  if (/חודש/.test(text)) return 30 * n;
+  if (/יום|ימים/.test(text)) return n;
+  return 7;
+}
+
+/** A new stage starts the day after the last one ends (or with the project) and lasts its typed duration. */
+function nextStageDates(s: Pick<State, 'stages' | 'project'>, duration: string) {
+  const day = (iso: string, add: number) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + add * 86400000).toISOString().slice(0, 10);
+  const lastEnd = s.stages.reduce((a, st) => (st.endDate > a ? st.endDate : a), '');
+  const startDate = lastEnd ? day(lastEnd, 1) : s.project.startDate;
+  return { startDate, endDate: day(startDate, durationDays(duration) - 1) };
+}
 const today = () => new Date().toISOString().slice(0, 10);
 
 function load(): State {
@@ -187,7 +210,8 @@ function useStoreValue() {
     setS((prev) => ({
       ...prev,
       ...fromServer(st),
-      ...(sub && { subscription: { cardLast4: sub.cardLast4 ?? prev.subscription.cardLast4, cancelled: sub.status === 'canceled', nextCharge: sub.nextCharge } }),
+      // no subscription on the server = none (not the demo's card)
+      subscription: sub ? { cardLast4: sub.cardLast4 ?? '', cancelled: sub.status === 'canceled', nextCharge: sub.nextCharge } : { cardLast4: '', cancelled: false },
     }));
   };
 
@@ -232,13 +256,25 @@ function useStoreValue() {
     try {
       const r = await api.post<{ projectId: string }>('/invites/accept', { token });
       stored.set(INVITE_KEY, null);
+      stored.set(INVITE_AT, null);
       return r.projectId;
     } catch (e) {
-      // offline: keep the link for the next try; anything else (used, other phone) won't get better
-      if (!serverUnavailable(e)) {
-        stored.set(INVITE_KEY, null);
-        toast(errorText(e), 'info');
+      // offline: keep the link for the next try
+      if (serverUnavailable(e)) return undefined;
+      // Not found: also a link sent during the owner's project setup, before the project exists on the server – it
+      // starts working once they finish. Kept and retried at the next login for a few days instead of being dropped.
+      if (e instanceof ApiError && e.status === 404) {
+        const first = Number(stored.get(INVITE_AT)) || Date.now();
+        stored.set(INVITE_AT, String(first));
+        if (Date.now() - first < 3 * 86400_000) {
+          toast('ההזמנה עדיין לא פעילה. אם קיבלת אותה עכשיו, פתח/י את הקישור שוב בעוד כמה דקות', 'info', 8000);
+          return undefined;
+        }
       }
+      // used, or sent to another phone: won't get better
+      stored.set(INVITE_KEY, null);
+      stored.set(INVITE_AT, null);
+      toast(errorText(e), 'info', 6000);
       return undefined;
     }
   };
@@ -367,8 +403,9 @@ function useStoreValue() {
       sync((b) => api.patch(`${b}/stages/${id}`, clean({ ...st, tasks: undefined })));
     },
     addStage: (name: string, budget: number, duration: string) => {
-      const end = ref.current.project.endDate;
-      sync((b) => api.post(`${b}/stages`, { name, budget, duration, startDate: end, endDate: end }));
+      // after the last stage, as long as its "זמן עבודה" (a new stage used to get one day: the project's end date twice)
+      const { startDate: start, endDate: end } = nextStageDates(ref.current, duration);
+      sync((b) => api.post(`${b}/stages`, { name, budget, duration, startDate: start, endDate: end }));
       patch((p) => ({
         stages: [
           ...p.stages,
@@ -381,8 +418,8 @@ function useStoreValue() {
             contractAmount: budget,
             paid: 0,
             duration,
-            startDate: p.project.endDate,
-            endDate: p.project.endDate,
+            startDate: start,
+            endDate: end,
             tasks: [],
             memberAvatars: [],
           },
@@ -441,7 +478,7 @@ function useStoreValue() {
             id: uid(),
             stageId,
             author: `${p.user.firstName} ${p.user.lastName}`,
-            authorTitle: roleTitle(p.user.role),
+            authorTitle: roleTitle(p.user.role, p.user.gender),
             time: 'עכשיו',
             text,
             photo: photos[0],
@@ -495,7 +532,7 @@ function useStoreValue() {
             ...e,
             id: uid(),
             author: `${p.user.firstName} ${p.user.lastName}`,
-            authorTitle: roleTitle(p.user.role),
+            authorTitle: roleTitle(p.user.role, p.user.gender),
             time: 'עכשיו',
             status: 'pending',
           },
@@ -538,7 +575,7 @@ function useStoreValue() {
                   stageId,
                   taskId,
                   author: `${p.user.firstName} ${p.user.lastName}`,
-                  authorTitle: roleTitle(p.user.role),
+                  authorTitle: roleTitle(p.user.role, p.user.gender),
                   time: 'עכשיו',
                   date: today(),
                   text: `משימה הושלמה: ${task.title}${note ? ' — ' + note : ''}`,
@@ -589,8 +626,11 @@ function useStoreValue() {
   return { s, ...actions };
 }
 
-export function roleTitle(r: User['role']) {
-  return { client: 'בעל הבית', contractor: 'קבלן ראשי', architect: 'אדריכל', renovator: 'משפץ' }[r];
+export function roleTitle(r: User['role'], g?: User['gender']) {
+  // agrees with the gender ("בעלת הבית"), the same as the server's titles
+  return g === 'female'
+    ? { client: 'בעלת הבית', contractor: 'קבלנית ראשית', architect: 'אדריכלית', renovator: 'משפצת' }[r]
+    : { client: 'בעל הבית', contractor: 'קבלן ראשי', architect: 'אדריכל', renovator: 'משפץ' }[r];
 }
 
 type Store = ReturnType<typeof useStoreValue>;
@@ -617,6 +657,16 @@ export function usePerms(): Access {
   if (s.remote?.access) return s.remote.access;
   const contractor = s.user.role === 'contractor';
   return { isOwner: !contractor, canEdit: true, canApprove: !contractor, seesBudget: !contractor };
+}
+
+/**
+ * Whether the user may change / remove a row of the archive or shopping list. A restricted member (contractor) may touch
+ * only what they added themselves – the server refuses the rest (lib/crud.ts).
+ */
+export function useCanModify() {
+  const { s } = useStore();
+  const { canEdit, seesBudget } = usePerms();
+  return (row: { authorId?: string }) => canEdit && (seesBudget || (!!row.authorId && row.authorId === s.user.id));
 }
 
 /** Derived numbers used by Home / Budget / Schedule */

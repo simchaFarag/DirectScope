@@ -176,6 +176,8 @@ model Contact {
   title     String   @default("") @db.VarChar(120)
   phone     String   @db.VarChar(20)
   avatar    String?  @db.VarChar(500)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -286,6 +288,8 @@ model ShoppingItem {
   title     String   @db.VarChar(255)
   done      Boolean  @default(false)
   photo     String?  @db.VarChar(500)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -370,6 +374,8 @@ model Reminder {
   stageId   String?
   text      String        @db.Text
   color     ReminderColor @default(yellow)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime      @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -388,6 +394,8 @@ model Document {
   fileName  String?  @db.VarChar(255)
   fileUrl   String?  @db.VarChar(500)
   preview   String?  @db.VarChar(500)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -402,6 +410,8 @@ model GalleryItem {
   title     String   @db.VarChar(255)
   date      DateTime @db.Date
   image     String?  @db.VarChar(500)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -414,6 +424,8 @@ model Inspiration {
   projectId String
   title     String   @db.VarChar(120)
   image     String?  @db.VarChar(500)
+  /// who added it – a restricted member (contractor) may change or remove only their own rows
+  authorId  String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

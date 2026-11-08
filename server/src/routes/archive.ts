@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { crud } from '../lib/crud.js';
 import { dateIn, fileRef, optionalStage, today } from '../lib/http.js';
-import { QUOTE_DOCS_HIDDEN } from '../lib/quotes.js';
+import { forbidden } from '../lib/errors.js';
+import { looksLikeQuote, QUOTE_DOCS_HIDDEN } from '../lib/quotes.js';
 import { toContact, toDocument, toGallery, toInspiration, toReminder } from '../lib/serialize.js';
 
 export const archiveRouter = Router();
@@ -12,6 +13,7 @@ crud(archiveRouter, '/reminders', {
   model: prisma.reminder,
   input: z.object({ stageId: optionalStage, text: z.string().trim().min(1).max(1000), color: z.enum(['yellow', 'blue']).default('yellow') }),
   map: toReminder,
+  authored: true,
 });
 
 crud(archiveRouter, '/documents', {
@@ -27,7 +29,12 @@ crud(archiveRouter, '/documents', {
   }),
   prepare: (d) => ({ ...d, date: d.date ?? today() }),
   scope: (a) => (a.seesBudget ? {} : QUOTE_DOCS_HIDDEN),
+  // a contractor's document titled like a quote would show up for the client next to the real offers (and be hidden from them)
+  check: (a, d) => {
+    if (!a.seesBudget && looksLikeQuote(d)) throw forbidden('השם "הצעת מחיר קבלן" שמור להצעות שהלקוח העלה');
+  },
   map: toDocument,
+  authored: true,
 });
 
 crud(archiveRouter, '/gallery', {
@@ -36,6 +43,7 @@ crud(archiveRouter, '/gallery', {
   input: z.object({ title: z.string().trim().min(1).max(255), date: dateIn.optional(), image: fileRef.nullish() }),
   prepare: (d) => ({ ...d, date: d.date ?? today() }),
   map: toGallery,
+  authored: true,
 });
 
 crud(archiveRouter, '/inspiration', {
@@ -43,6 +51,7 @@ crud(archiveRouter, '/inspiration', {
   orderBy: { createdAt: 'desc' },
   input: z.object({ title: z.string().trim().min(1).max(120), image: fileRef.nullish() }),
   map: toInspiration,
+  authored: true,
 });
 
 crud(archiveRouter, '/contacts', {
@@ -54,4 +63,5 @@ crud(archiveRouter, '/contacts', {
     avatar: fileRef.nullish(),
   }),
   map: toContact,
+  authored: true,
 });

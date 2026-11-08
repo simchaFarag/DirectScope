@@ -1,7 +1,8 @@
 import type { RequestHandler, Router } from 'express';
 import type { ZodObject, ZodRawShape } from 'zod';
-import { notFound } from './errors.js';
+import { forbidden, notFound } from './errors.js';
 import { assertStage, parse, param } from './http.js';
+import { me } from '../middleware/auth.js';
 import { access, requireEdit, type Access } from '../middleware/project.js';
 
 /** The subset of a Prisma model delegate that the generic routes use. */
@@ -24,6 +25,15 @@ interface Options<Shape extends ZodRawShape> {
   scope?: (a: Access) => object;
   /** fill in defaults / derived columns before create */
   prepare?: (data: Record<string, unknown>) => Record<string, unknown>;
+  /** extra checks on what a member writes (create, and the merged row on update); throw to refuse */
+  check?: (a: Access, data: Record<string, unknown>) => void;
+  /**
+   * The model has an authorId column. A restricted member (contractor / professional) may then change or remove only the
+   * rows they added themselves – the client's documents, photos and reminders are not theirs to delete.
+   */
+  authored?: boolean;
+  /** fields a restricted member may still change on rows they didn't add (e.g. ticking a shopping item "done") */
+  sharedFields?: string[];
 }
 
 /**
@@ -40,6 +50,8 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
     if (!row) throw notFound();
     return row;
   };
+  /** restricted members touch only their own rows (when the model records its author) */
+  const mine = (a: Access, userId: string, row: { authorId?: string | null }) => !o.authored || a.seesBudget || row.authorId === userId;
   const checkStage = async (projectId: string, data: Record<string, unknown>) => {
     if (typeof data.stageId === 'string') await assertStage(projectId, data.stageId);
   };
@@ -50,26 +62,34 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
   });
 
   router.post(path, ...guard, requireEdit, async (req, res) => {
-    const projectId = access(req).project.id;
+    const a = access(req);
     let data = parse(o.input, req.body) as Record<string, unknown>;
     if (o.prepare) data = o.prepare(data);
-    await checkStage(projectId, data);
-    const row = await o.model.create({ data: { ...data, projectId } });
+    o.check?.(a, data);
+    await checkStage(a.project.id, data);
+    const row = await o.model.create({ data: { ...data, projectId: a.project.id, ...(o.authored && { authorId: me(req).id }) } });
     res.status(201).json(o.map(row));
   });
 
   router.patch(`${path}/:id`, ...guard, requireEdit, async (req, res) => {
-    const projectId = access(req).project.id;
-    await own(access(req), param(req));
+    const a = access(req);
+    const row = await own(a, param(req));
     const data = parse(o.input.partial(), req.body) as Record<string, unknown>;
-    await checkStage(projectId, data);
-    const row = await o.model.update({ where: { id: param(req) }, data });
-    res.json(o.map(row));
+    if (!mine(a, me(req).id, row)) {
+      const allowed = new Set(o.sharedFields ?? []);
+      if (Object.keys(data).some((k) => data[k] !== undefined && !allowed.has(k))) throw forbidden('אפשר לערוך רק פריטים שהוספת');
+    }
+    o.check?.(a, { ...row, ...data });
+    await checkStage(a.project.id, data);
+    const updated = await o.model.update({ where: { id: row.id }, data });
+    res.json(o.map(updated));
   });
 
   router.delete(`${path}/:id`, ...guard, requireEdit, async (req, res) => {
-    await own(access(req), param(req));
-    await o.model.delete({ where: { id: param(req) } });
+    const a = access(req);
+    const row = await own(a, param(req));
+    if (!mine(a, me(req).id, row)) throw forbidden('אפשר למחוק רק פריטים שהוספת');
+    await o.model.delete({ where: { id: row.id } });
     res.status(204).end();
   });
 }

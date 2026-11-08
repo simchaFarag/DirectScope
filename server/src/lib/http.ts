@@ -3,6 +3,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { badRequest } from './errors.js';
+import { unsigned } from './files.js';
 
 export const parse = <S extends ZodTypeAny>(schema: S, data: unknown): z.infer<S> => schema.parse(data);
 
@@ -27,7 +28,9 @@ const ownPath = /^\/(uploads|img|avatars)\/(?!.*\.\.)[\w./%-]+$/;
 export const fileRef = z
   .string()
   .max(500)
-  .refine((s) => ownPath.test(s) || (s.startsWith(`${config.PUBLIC_URL}/uploads/`) && !s.includes('..')), 'קישור קובץ לא תקין');
+  .refine((s) => ownPath.test(s.replace(/\?.*$/, '')) || (s.startsWith(`${config.PUBLIC_URL}/uploads/`) && !s.includes('..')), 'קישור קובץ לא תקין')
+  // urls come back with the signature the API added when it sent them (lib/files.ts) – stored bare
+  .transform(unsigned);
 
 /** Makes sure a stage id from the client belongs to the project in the url. */
 export async function assertStage(projectId: string, stageId: string) {

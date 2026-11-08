@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { AppBar, Heading, StageTabs, SubScreen, TabScreen } from '@/components/layout';
 import { StageGlyph } from '@/components/icons';
 import { Icon } from '@/components/FigmaIcon';
 import { Avatar, BottomActions, Button, Checkbox, ConfirmDialog, Field, Lightbox, Modal, PhotoPicker, ProgressBar, Select, TextArea, UploadSlot } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { pickDocument, pickImages } from '@/lib/files';
-import { stageExceptions, usePerms, useStore, useTotals } from '@/data/store';
+import { stageExceptions, useCanModify, usePerms, useStore, useTotals } from '@/data/store';
 import type { ExceptionReq } from '@/data/types';
 import { cn, fmtDate, ils, stageLabel, thousands, moneyInput, shekels } from '@/lib/format';
 import { ExtrasTab, Hero, SectionHead, SmallIconButton, stageTabs } from './Schedule';
@@ -69,10 +70,13 @@ export function Budget() {
                 <p>{contractor ? 'סכום חוזה קבלן' : 'תקציב מעודכן'}</p>
                 <p>{ils(contractor ? contract : t.total)}</p>
               </div>
-              <div className="flex flex-col gap-2">
-                <p className="text-body text-muted">נותר לתשלום</p>
-                <p className="text-lg font-semibold leading-5">{ils((contractor ? contract : t.total) - t.paid)}</p>
-              </div>
+              {/* the contractor doesn't get the client's payments – "נותר לתשלום" would be the whole contract */}
+              {!contractor && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-body text-muted">נותר לתשלום</p>
+                  <p className="text-lg font-semibold leading-5">{ils(t.total - t.paid)}</p>
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <p className="text-body text-muted">חריגות אושרו</p>
                 <p className="text-lg font-semibold leading-5">{ils(t.approvedEx)}</p>
@@ -82,13 +86,14 @@ export function Budget() {
                 </button>
               </div>
             </div>
-            <div className="relative flex flex-col items-center gap-1.5 text-center">
+            {!contractor && <div className="relative flex flex-col items-center gap-1.5 text-center">
               <div className="font-display font-bold">
-                <p className="text-xl1">{thousands(t.paid)}</p>
+                {/* a long figure (₪10M+) overran the ring at the big size */}
+                <p className={thousands(t.paid).length > 5 ? 'text-h1' : 'text-xl1'}>{thousands(t.paid)}</p>
                 <p className="text-h3">אלף ש״ח</p>
               </div>
               <p className="text-lg">שולמו עד כה</p>
-            </div>
+            </div>}
           </div>
         </div>
       </Hero>
@@ -116,14 +121,18 @@ export function Budget() {
                 </span>
               </div>
               <div className="flex w-full gap-6 whitespace-nowrap text-center text-body">
-                <div className="flex flex-col gap-2">
-                  <p className="text-muted">שולמו</p>
-                  <p>{ils(st.paid)}</p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <p className="text-muted">יתרה</p>
-                  <p>{ils(total - st.paid)}</p>
-                </div>
+                {!contractor && (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-muted">שולמו</p>
+                      <p>{ils(st.paid)}</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-muted">יתרה</p>
+                      <p>{ils(total - st.paid)}</p>
+                    </div>
+                  </>
+                )}
                 <div className="flex flex-col gap-2">
                   <p className="text-muted">סה״כ</p>
                   <p>{ils(total)}</p>
@@ -149,6 +158,7 @@ export function StageBudget() {
   const [shopPhoto, setShopPhoto] = useState<string>();
   const [adding, setAdding] = useState(false);
   const perms = usePerms();
+  const canModify = useCanModify();
 
   if (stageId === 'extras') return <ExtrasTab base="/app/budget" />;
   const st = s.stages.find((x) => x.id === stageId);
@@ -168,18 +178,29 @@ export function StageBudget() {
       <div key={st.id} className="animate-fade-up space-y-10 px-6 pt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10 lg:space-y-0">
         <section className="flex flex-col items-center gap-6">
           <div className="flex w-full flex-col items-center gap-4">
-            <div className="flex flex-col items-center gap-0.5">
-              <p className="text-lg">סטטוס תקציב:</p>
-              <p className="font-display text-h1 font-bold tracking-[-0.28px] text-primary">{ils(st.paid)}</p>
-              <p className="text-body text-muted">שולמו עד כה</p>
-            </div>
-            <div className="flex w-full flex-col items-start">
-              <span className="flex h-4 items-center rounded-lg bg-accent px-2 text-caption text-white">{thousands(total - st.paid)} אש״ח</span>
-              <ProgressBar value={total ? (st.paid / total) * 100 : 0} color="bg-primary" className="bg-bg" />
-            </div>
+            {/* the contractor doesn't get the client's payments: no "שולמו ₪0" / remaining = whole contract */}
+            {contractor ? (
+              <div className="flex flex-col items-center gap-0.5">
+                <p className="text-lg">סכום חוזה קבלן:</p>
+                <p className="font-display text-h1 font-bold tracking-[-0.28px] text-primary">{ils(total)}</p>
+                {ex > 0 && <p className="text-body text-muted">כולל חריגות שאושרו</p>}
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col items-center gap-0.5">
+                  <p className="text-lg">סטטוס תקציב:</p>
+                  <p className="font-display text-h1 font-bold tracking-[-0.28px] text-primary">{ils(st.paid)}</p>
+                  <p className="text-body text-muted">שולמו עד כה</p>
+                </div>
+                <div className="flex w-full flex-col items-start">
+                  <span className="flex h-4 items-center rounded-lg bg-accent px-2 text-caption text-white">{thousands(total - st.paid)} אש״ח</span>
+                  <ProgressBar value={total ? (st.paid / total) * 100 : 0} color="bg-primary" className="bg-bg" />
+                </div>
+              </>
+            )}
             <dl className="w-[278px] text-body">
               <Line k="סה״כ מעודכן:" v={ils(total)} />
-              <Line k="יתרה לתשלום:" v={ils(total - st.paid)} />
+              {!contractor && <Line k="יתרה לתשלום:" v={ils(total - st.paid)} />}
               <Line k="סך חריגות (אושרו):" v={ils(ex)} />
               <Line k="סכום חוזה קבלן:" v={ils(st.contractAmount)} last />
             </dl>
@@ -223,7 +244,7 @@ export function StageBudget() {
                     <img src={it.photo} alt="" className="h-7 w-7 rounded object-cover" />
                   </button>
                 )}
-                {canEdit && <span className="flex items-start gap-2">
+                {canModify(it) && <span className="flex items-start gap-2">
                   <button className="grid h-6 w-6 place-items-center" onClick={() => pickImages({ capture: true }).then(([p]) => p && updateShopping(it.id, { photo: p }))} aria-label="צילום פריט">
                     <Icon name="camera" size={16} />
                   </button>
@@ -463,6 +484,7 @@ export function ExceptionsScreen() {
               <ExceptionCard key={e.id} e={e} white />
             ))}
         </div>
+        {!s.exceptions.length && <p className="text-body text-muted">אין בקשות חריגה עדיין</p>}
       </main>
     </>
   );
@@ -510,7 +532,7 @@ export function ExceptionForm() {
 export function ReceiptForm() {
   const nav = useNavigate();
   const [q] = useSearchParams();
-  const { addReceipt } = useStore();
+  const { s, addReceipt } = useStore();
   const toast = useToast();
   const options = useStageOptions(false);
   const [stage, setStage] = useState(q.get('stage') ?? undefined);
@@ -518,6 +540,10 @@ export function ReceiptForm() {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [file, setFile] = useState<{ name: string; preview?: string; url?: string }>();
+  // a typo with extra zeros (₪200,000,000 on a ₪12,500 stage) used to save without a word
+  const st = s.stages.find((x) => x.id === stage);
+  const left = st ? st.budget + stageExceptions(s, st.id) - st.paid : 0;
+  const tooHigh = !!st && shekels(amount) > Math.max(left, 0);
   return (
     <SubScreen title="פירוט הוצאות" sheet>
       <Heading title="פירוט הוצאות" sub="הוספת חשבונית/קבלה" />
@@ -536,6 +562,11 @@ export function ReceiptForm() {
           <Field aria-label="תאריך" className="flex-1" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <Field aria-label="סכום" className="flex-1" inputMode="numeric" value={amount} onChange={(e) => setAmount(moneyInput(e.target.value))} placeholder="סכום" />
         </div>
+        {tooHigh && (
+          <p className="px-2 text-caption text-warn">
+            {left > 0 ? `הסכום גבוה מהיתרה לתשלום בשלב (${ils(left)})` : 'בשלב הזה כבר שולם מלוא הסכום'} – כדאי לבדוק שאין טעות
+          </p>
+        )}
       </div>
       <BottomActions inline>
         <Button

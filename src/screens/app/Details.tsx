@@ -1,6 +1,7 @@
 import { Download, MessageCircle, Phone, Plus, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { Heading, SubScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { Avatar, BottomActions, Button, Chip, Field, Lightbox, SectionTitle, UploadSlot } from '@/components/ui';

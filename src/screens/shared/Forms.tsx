@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { AppBar, Heading, SubScreen } from '@/components/layout';
 import { Icon, type IconName } from '@/components/FigmaIcon';
 import { useToast } from '@/components/toast';

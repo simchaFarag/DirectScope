@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
+import { useNavigate } from '@/lib/nav';
 import { StageTabs, SubScreen, TabScreen, Heading } from '@/components/layout';
 import { Icon } from '@/components/FigmaIcon';
 import { AvatarStack, VDivider, BottomActions, Button, IconButton, Modal, PhotoSourceButtons, ProgressBar, Ring, SectionTitle, TextArea, UploadSlot } from '@/components/ui';
@@ -69,7 +70,8 @@ export function Schedule() {
               <Icon name="date" className="text-primary" />
               <h3 className="flex-1 text-lg font-semibold leading-5">תאריכים</h3>
             </div>
-            {perms.canEdit && (
+            {/* the project dates are the client's – a contractor's save was refused by the server after a "saved" toast */}
+            {perms.canEdit && perms.seesBudget && (
               <button className="grid h-6 w-6 place-items-center rounded-full bg-primary-50" aria-label="עריכת תאריכים" onClick={() => nav('/app/project/edit')}>
                 <Icon name="sEdit" />
               </button>
@@ -144,7 +146,8 @@ export function StageSchedule() {
   const openTask = (t: Task) => (waiting.has(t.id) ? toast('המשימה ממתינה לאישור הלקוח', 'info') : setCompleting(t));
   const p = stageProgress(st);
   const days = Math.max(0, Math.ceil((new Date(st.endDate).getTime() - Date.now()) / 86400000));
-  const updates = s.updates.filter((u) => u.stageId === st.id);
+  // a rejected update isn't part of the stage's story (it looked the same as the approved ones)
+  const updates = s.updates.filter((u) => u.stageId === st.id && u.status !== 'rejected');
   const reminders = s.reminders.filter((r) => r.stageId === st.id);
 
   return (
@@ -357,9 +360,12 @@ export function TasksEdit() {
   const st = s.stages.find((x) => x.id === stageId);
   const [editing, setEditing] = useState<string>();
   const [completing, setCompleting] = useState<Task>();
+  const perms = usePerms();
   // a contractor's task status changes only by completing it (→ an update the client approves); the server enforces it
-  const statusLocked = !usePerms().seesBudget;
+  const statusLocked = !perms.seesBudget;
   if (!st) return <Navigate to="/app/schedule" replace />;
+  // view-only members reached this screen by its address and saw edit / delete buttons the server refuses
+  if (!perms.canEdit) return <Navigate to={`/app/schedule/${st.id}`} replace />;
   const waiting = new Set(s.updates.filter((u) => u.status === 'pending' && u.taskId).map((u) => u.taskId));
   const tasks = st.tasks;
   const set = (next: Task[]) => setTasks(st.id, next);

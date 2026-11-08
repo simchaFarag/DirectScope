@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { TabScreen } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { Avatar, Chip, Lightbox, Modal, Button, Field, Select } from '@/components/ui';
-import { useStore } from '@/data/store';
+import { usePerms, useStore } from '@/data/store';
 import { pickDocument, pickImages } from '@/lib/files';
 import { cn, fmtDate } from '@/lib/format';
 import { useStageOptions } from './Updates';
@@ -71,6 +71,7 @@ export function Archive() {
   const toast = useToast();
   const { tab = 'gallery' } = useParams<{ tab: Tab }>();
   const { s, addGallery } = useStore();
+  const { canEdit, isOwner } = usePerms();
   const [q, setQ] = useState('');
   const [asc, setAsc] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>();
@@ -200,10 +201,10 @@ export function Archive() {
             <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 xl:grid-cols-3">
               {[
                 ...s.contacts.filter((c) => match(c.name, c.title)).map((c) => ({ id: c.id, name: c.name, role: c.title, phone: c.phone, avatar: c.avatar, to: `/app/contact/${c.id}` })),
-                ...s.members.filter((m) => match(m.name)).map((m) => ({ id: m.id, name: m.name, role: `שותף · ${m.permission === 'edit' ? 'עריכה' : 'צפייה'}`, phone: m.phone, avatar: m.avatar, to: `/app/share/${m.id}` })),
+                ...s.members.filter((m) => match(m.name)).map((m) => ({ id: m.id, name: m.name, role: `שותף · ${m.permission === 'edit' ? 'עריכה' : 'צפייה'}`, phone: m.phone, avatar: m.avatar, to: isOwner ? `/app/share/${m.id}` : undefined })),
               ].map((c) => (
                 <div key={c.id} className="flex items-center gap-4 rounded-lg bg-bg p-4 lg:bg-white">
-                  <button onClick={() => nav(c.to)} className="flex items-center gap-4 text-right">
+                  <button onClick={() => c.to && nav(c.to)} className="flex items-center gap-4 text-right">
                     <Avatar src={c.avatar} name={c.name} size={40} />
                     <span className="flex flex-col gap-1 whitespace-nowrap">
                       <span className="text-body font-medium leading-4 tracking-[0.042px]">{c.name}</span>
@@ -211,14 +212,15 @@ export function Archive() {
                       <span className="text-body text-muted">{c.phone}</span>
                     </span>
                   </button>
-                  <span className="flex flex-1 items-center justify-end gap-4">
+                  {/* other members' numbers are the owner's to see – no call / WhatsApp buttons to an empty number */}
+                  {c.phone && <span className="flex flex-1 items-center justify-end gap-4">
                     <a href={`tel:${c.phone}`} aria-label={`התקשר ל${c.name}`}>
                       <Icon name="call" />
                     </a>
                     <a href={`https://wa.me/972${c.phone.replace(/\D/g, '').replace(/^0/, '')}`} target="_blank" rel="noopener" aria-label={`וואטסאפ ל${c.name}`}>
                       <Icon name="chat" />
                     </a>
-                  </span>
+                  </span>}
                 </div>
               ))}
             </div>
@@ -277,7 +279,7 @@ export function Archive() {
       </div>
 
       {/* Figma "icon buttoms" 56px – not on the תיעוד tab */}
-      {tab !== 'info' && (
+      {tab !== 'info' && canEdit && (
         <button onClick={fab} className="fixed bottom-[100px] lg:bottom-10 right-[max(22px,calc(50%-173px))] z-20 grid h-14 w-14 place-items-center rounded-full bg-primary text-white shadow-[0_0_5px_rgba(62,165,244,0.1)] lg:right-[max(2.5rem,calc(50%-488px))]" aria-label="הוספה">
           <Icon name="fabAdd" />
         </button>

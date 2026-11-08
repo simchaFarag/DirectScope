@@ -66,7 +66,8 @@ export function UploadDocs() {
   const slot = (arr: Slot[], set: (a: Slot[]) => void, i: number) => (
     <UploadSlot
       key={i}
-      filled={arr[i] ? (arr[i]!.preview ?? true) : undefined}
+      // a PDF / Word file shows the document icon (the plain grey tile didn't say what was uploaded)
+      filled={arr[i] ? (arr[i]!.preview ?? '/img/doc.svg') : undefined}
       label={arr[i]?.name ?? 'העלאת קובץ'}
       onAdd={() => pickDocument().then((f) => f && put(arr, set, i, f))}
       onRemove={() => put(arr, set, i, undefined)}

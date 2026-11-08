@@ -21,23 +21,29 @@ import type {
   Update,
   User,
 } from '@prisma/client';
+import { signAll, signFile as f } from './files.js';
 
 export const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : undefined);
 const strings = (j: unknown) => (Array.isArray(j) ? j.filter((x): x is string => typeof x === 'string') : []);
 /** +972527683159 → 527683159 (the format the login screen uses) */
 export const localPhone = (p: string) => p.replace(/^\+972/, '');
 
-export const roleTitle = (r: User['role']) => ({ client: 'בעל הבית', contractor: 'קבלן ראשי', architect: 'אדריכל', renovator: 'משפץ' })[r];
+/** Titles agree with the person's gender ("בעלת הבית" – a woman was shown as "בעל הבית") */
+export const roleTitle = (r: User['role'], g?: User['gender'] | null) =>
+  g === 'female'
+    ? { client: 'בעלת הבית', contractor: 'קבלנית ראשית', architect: 'אדריכלית', renovator: 'משפצת' }[r]
+    : { client: 'בעל הבית', contractor: 'קבלן ראשי', architect: 'אדריכל', renovator: 'משפץ' }[r];
 
 /** "שיתוף" roles – what the owner chose when inviting the member */
-export const memberRoleTitle = (r: Member['role']) => ({ professional: 'בעל מקצוע', family: 'משפחה', renovator: 'משפץ' })[r];
+export const memberRoleTitle = (r: Member['role'], g?: User['gender'] | null) =>
+  g === 'female' ? { professional: 'בעלת מקצוע', family: 'משפחה', renovator: 'משפצת' }[r] : { professional: 'בעל מקצוע', family: 'משפחה', renovator: 'משפץ' }[r];
 
 /**
  * The title shown under an author's name on updates / exceptions. In someone else's project it comes from the invite,
  * not from the role the user picked at signup – a contractor who picked "משפץ" must not show up as "בעל הבית".
  */
 export const authorTitle = (u: User, a: { isOwner: boolean; memberRole?: Member['role'] }) =>
-  !a.isOwner && a.memberRole ? memberRoleTitle(a.memberRole) : roleTitle(u.role);
+  !a.isOwner && a.memberRole ? memberRoleTitle(a.memberRole, u.gender) : roleTitle(u.role, u.gender);
 
 export const toUser = (u: User) => ({
   id: u.id,
@@ -46,7 +52,7 @@ export const toUser = (u: User) => ({
   phone: localPhone(u.phone),
   gender: u.gender,
   role: u.role,
-  avatar: u.avatar ?? undefined,
+  avatar: f(u.avatar),
   termsAccepted: !!u.termsAcceptedAt,
 });
 
@@ -63,7 +69,7 @@ export const toProject = (p: Project, seesBudget = true) => ({
   quotesCount: p.quotesCount,
 });
 
-export const toTask = (t: Task) => ({ id: t.id, title: t.title, status: t.status, note: t.note ?? undefined, photo: t.photo ?? undefined });
+export const toTask = (t: Task) => ({ id: t.id, title: t.title, status: t.status, note: t.note ?? undefined, photo: f(t.photo) });
 
 /** Contractors see only the contract amount, never the client's full budget (SPEC §2). */
 export const toStage = (s: Stage & { tasks: Task[] }, seesBudget = true) => ({
@@ -78,7 +84,7 @@ export const toStage = (s: Stage & { tasks: Task[] }, seesBudget = true) => ({
   startDate: day(s.startDate)!,
   endDate: day(s.endDate)!,
   tasks: [...s.tasks].sort((a, b) => a.order - b.order).map(toTask),
-  memberAvatars: strings(s.memberAvatars),
+  memberAvatars: signAll(strings(s.memberAvatars)),
 });
 
 export const toExtra = (e: ExtraExpense) => ({
@@ -96,11 +102,11 @@ export const toReceipt = (r: Receipt) => ({
   title: r.title,
   amount: r.amount,
   date: day(r.date)!,
-  fileUrl: r.fileUrl ?? undefined,
-  preview: r.preview ?? undefined,
+  fileUrl: f(r.fileUrl),
+  preview: f(r.preview),
 });
 
-export const toShopping = (s: ShoppingItem) => ({ id: s.id, stageId: s.stageId, title: s.title, done: s.done, photo: s.photo ?? undefined });
+export const toShopping = (s: ShoppingItem) => ({ id: s.id, stageId: s.stageId, title: s.title, done: s.done, photo: f(s.photo), authorId: s.authorId ?? undefined });
 
 export const toComment = (c: Comment, meId?: string) => ({
   id: c.id,
@@ -111,13 +117,13 @@ export const toComment = (c: Comment, meId?: string) => ({
 });
 
 export const toUpdate = (u: Update & { comments: Comment[] }, meId?: string) => {
-  const photos = strings(u.photos);
+  const photos = signAll(strings(u.photos));
   return {
     id: u.id,
     stageId: u.stageId ?? 'general',
     author: u.authorName,
     authorTitle: u.authorTitle,
-    avatar: u.avatar ?? undefined,
+    avatar: f(u.avatar),
     /** ISO timestamp – the client formats it ("לפני 3 שעות") */
     time: u.createdAt.toISOString(),
     createdAt: u.createdAt.toISOString(),
@@ -137,18 +143,18 @@ export const toException = (e: ExceptionReq) => ({
   stageId: e.stageId,
   author: e.authorName,
   authorTitle: e.authorTitle,
-  avatar: e.avatar ?? undefined,
+  avatar: f(e.avatar),
   time: e.createdAt.toISOString(),
   createdAt: e.createdAt.toISOString(),
   title: e.title,
   description: e.description,
   amount: e.amount,
-  photos: strings(e.photos),
+  photos: signAll(strings(e.photos)),
   status: e.status,
   rejectReason: e.rejectReason ?? undefined,
 });
 
-export const toReminder = (r: Reminder) => ({ id: r.id, stageId: r.stageId ?? 'general', text: r.text, color: r.color });
+export const toReminder = (r: Reminder) => ({ id: r.id, stageId: r.stageId ?? 'general', text: r.text, color: r.color, authorId: r.authorId ?? undefined });
 
 export const toDocument = (d: Document) => ({
   id: d.id,
@@ -156,22 +162,24 @@ export const toDocument = (d: Document) => ({
   title: d.title,
   date: day(d.date)!,
   fileName: d.fileName ?? undefined,
-  fileUrl: d.fileUrl ?? undefined,
-  preview: d.preview ?? undefined,
+  fileUrl: f(d.fileUrl),
+  preview: f(d.preview),
+  authorId: d.authorId ?? undefined,
 });
 
-export const toGallery = (g: GalleryItem) => ({ id: g.id, title: g.title, date: day(g.date)!, image: g.image ?? undefined });
-export const toInspiration = (i: Inspiration) => ({ id: i.id, title: i.title, image: i.image ?? undefined });
-export const toContact = (c: Contact) => ({ id: c.id, name: c.name, title: c.title, phone: c.phone, avatar: c.avatar ?? undefined });
+export const toGallery = (g: GalleryItem) => ({ id: g.id, title: g.title, date: day(g.date)!, image: f(g.image), authorId: g.authorId ?? undefined });
+export const toInspiration = (i: Inspiration) => ({ id: i.id, title: i.title, image: f(i.image), authorId: i.authorId ?? undefined });
+export const toContact = (c: Contact) => ({ id: c.id, name: c.name, title: c.title, phone: c.phone, avatar: f(c.avatar), authorId: c.authorId ?? undefined });
 
 /** Phone numbers and the invite link are for the project owner only; other members see names and roles. */
 export const toMember = (m: Member, full = true) => ({
   id: m.id,
   name: m.name,
-  phone: full ? localPhone(m.phone) : '',
+  // with the leading 0 ("0537770102"); the member screens showed "537770102"
+  phone: full ? '0' + localPhone(m.phone) : '',
   role: m.role,
   permission: m.permission,
-  avatar: m.avatar ?? undefined,
+  avatar: f(m.avatar),
   joined: !!m.userId,
   inviteToken: full ? (m.inviteToken ?? undefined) : undefined,
 });
