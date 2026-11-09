@@ -14,11 +14,16 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('30d'),
 
-  SMS_PROVIDER: z.enum(['console', 'twilio']).default('console'),
+  SMS_PROVIDER: z.enum(['console', 'twilio', 'inforu']).default('console'),
   OTP_DEV_CODE: z.string().regex(/^\d{6}$/).optional().or(z.literal('').transform(() => undefined)),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM: z.string().optional(),
+  INFORU_BASE_URL: z.string().url().default('https://capi.inforu.co.il'),
+  // "Basic xxx" from the InforU account (quotes and the "Basic " prefix are optional)
+  INFORU_TOKEN: z.string().optional(),
+  // sender name shown on the phone (up to 11 English letters/digits, approved in the InforU account)
+  INFORU_SMS_SENDER: z.string().optional(),
 
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(15),
@@ -43,6 +48,11 @@ if (env.NODE_ENV === 'production' && env.TRUST_PROXY === 0) {
 }
 if (env.SMS_PROVIDER === 'twilio' && !(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)) {
   console.error('SMS_PROVIDER=twilio requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM');
+  process.exit(1);
+}
+
+if (env.SMS_PROVIDER === 'inforu' && !(env.INFORU_TOKEN && env.INFORU_SMS_SENDER)) {
+  console.error('SMS_PROVIDER=inforu requires INFORU_TOKEN and INFORU_SMS_SENDER');
   process.exit(1);
 }
 

@@ -114,7 +114,9 @@ GET    /projects/:pid/state                         כל נתוני הפרויק
    DATABASE_URL=mysql://<user>:<password>@127.0.0.1:3306/<db>
    JWT_SECRET=<מחרוזת אקראית>
    OTP_DEV_CODE=
-   SMS_PROVIDER=twilio        # או console עד שיש ספק SMS
+   SMS_PROVIDER=inforu        # או twilio, או console עד שיש ספק SMS
+   INFORU_TOKEN=Basic <הטוקן מ-InforU>
+   INFORU_SMS_SENDER=<שם השולח>
    ```
 4. **התקנה:**
    ```bash
