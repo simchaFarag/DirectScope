@@ -14,7 +14,7 @@ import type { StageIcon } from '@/data/types';
 export function AppLayout() {
   const { pathname } = useLocation();
   return (
-    <div className={cn('phone', pathname.startsWith('/app') && 'lg:max-w-none')}>
+    <div className={cn('phone', pathname.startsWith('/app') && 'app-wide lg:max-w-none')}>
       <Outlet />
     </div>
   );

@@ -44,6 +44,20 @@
   .desk-narrow {
     @apply lg:mx-auto lg:w-full lg:max-w-2xl;
   }
+  /* Large screens: the app screens are drawn at Figma (phone) pixel sizes, which look tiny on a wide monitor –
+     scale the content area up as a whole so the proportions stay exactly as designed */
+  @media (min-width: 1280px) {
+    .app-wide .desk,
+    .app-wide .desk-narrow {
+      zoom: 1.15;
+    }
+  }
+  @media (min-width: 1536px) {
+    .app-wide .desk,
+    .app-wide .desk-narrow {
+      zoom: 1.3;
+    }
+  }
   .card {
     @apply rounded-lg bg-white shadow-blue;
   }

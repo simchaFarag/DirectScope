@@ -4,7 +4,7 @@ import { TabScreen } from '@/components/layout';
 import { Gauge, ProgressBar } from '@/components/ui';
 import { stageProgress, usePerms, useStore, useTotals } from '@/data/store';
 import type { Stage } from '@/data/types';
-import { fmtDate, greeting, ils } from '@/lib/format';
+import { cn, fmtDate, greeting, ils } from '@/lib/format';
 
 export function Home() {
   const nav = useNavigate();
@@ -25,6 +25,8 @@ export function Home() {
   ]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
+  const hasDaily = daily.length > 0;
+  const rightCol = hasDaily && 'xl:col-start-3';
 
   return (
     <TabScreen home>
@@ -39,10 +41,11 @@ export function Home() {
           </div>
         </div>
 
-        {/* Desktop: budget | daily update | status + quick cards + docs (mobile keeps the Figma order) */}
-        <div className="space-y-8 lg:grid lg:grid-cols-2 lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-6 lg:space-y-0 xl:grid-cols-3">
+        {/* Desktop: budget | daily update | status + quick cards + docs (mobile keeps the Figma order).
+            No daily update yet: two columns, so the middle column is not left empty */}
+        <div className={cn('space-y-8 lg:grid lg:grid-cols-2 lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-6 lg:space-y-0', hasDaily && 'xl:grid-cols-3')}>
         {/* Budget card — the client cares most about money */}
-        <section className="relative flex flex-col items-center gap-2 overflow-hidden rounded-2xl bg-white p-4 shadow-[0_0_5px_rgba(62,165,244,0.1)] lg:col-start-1 lg:row-start-1 xl:row-span-3">
+        <section className={cn('relative flex flex-col items-center gap-2 overflow-hidden rounded-2xl bg-white p-4 shadow-[0_0_5px_rgba(62,165,244,0.1)] lg:col-start-1 lg:row-start-1', hasDaily ? 'xl:row-span-3' : 'lg:row-span-3')}>
           <img src="/img/card-clouds.svg" alt="" className="pointer-events-none absolute left-[13.5%] right-[15.8%] top-[7.8%] w-[70.7%]" />
           <div className="relative flex w-full items-center justify-between">
             <span className="flex h-6 items-center rounded bg-white px-2 text-caption">{isContractor ? 'סכום חוזה' : 'ניהול תקציב'}</span>
@@ -77,7 +80,7 @@ export function Home() {
         </section>
 
         {/* Project status */}
-        <button onClick={() => nav('/app/schedule')} className="flex w-full flex-col gap-2 text-right lg:col-start-2 lg:row-start-1 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)] xl:col-start-3">
+        <button onClick={() => nav('/app/schedule')} className={cn('flex w-full flex-col gap-2 text-right lg:col-start-2 lg:row-start-1 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)]', rightCol)}>
           <div className="flex w-full items-start justify-between">
             <span className="text-lg">סטטוס פרויקט</span>
             <span className="font-display text-h3 font-bold">{t.progress}% הושלמו!</span>
@@ -89,7 +92,7 @@ export function Home() {
         </button>
 
         {/* Daily updates – swipe for previous days (designer note) */}
-        <div className="lg:col-start-1 lg:row-span-2 lg:row-start-2 xl:col-start-2 xl:row-span-3 xl:row-start-1">
+        <div className={cn('lg:col-start-1 lg:row-span-2 lg:row-start-2 xl:col-start-2 xl:row-span-3 xl:row-start-1', !hasDaily && 'hidden')}>
           <div className="no-scrollbar -mx-6 flex snap-x snap-mandatory gap-6 overflow-x-auto px-6 lg:mx-0 lg:px-0">
             {daily.map((u) => {
               const st = s.stages.find((x) => x.id === u.stageId) ?? current;
@@ -127,7 +130,7 @@ export function Home() {
         </div>
 
         {/* Quick status cards (Figma: white, 240×64, coloured glow behind the text) */}
-        <div className="flex flex-col gap-4 lg:col-start-2 lg:row-start-2 xl:col-start-3">
+        <div className={cn('flex flex-col gap-4 lg:col-start-2 lg:row-start-2', rightCol)}>
           {pendingEx && (
             <button onClick={() => nav('/app/exceptions')} className="relative flex h-16 w-full items-center gap-4 overflow-hidden rounded-lg bg-white px-4 py-2 text-right lg:shadow-[0_0_5px_rgba(62,165,244,0.1)]">
               <span className="absolute left-[42px] top-[17px] h-8 w-[120px] blur-[40px]" style={{ backgroundImage: 'linear-gradient(46.3deg, rgba(242,153,74,0.4) 47%, rgba(242,153,74,0) 98%)' }} />
@@ -153,7 +156,7 @@ export function Home() {
 
         {/* Recent documents – the project's own files (shown once there are any) */}
         {recent.length > 0 && (
-        <section className="flex flex-col gap-2.5 py-4 lg:col-start-2 lg:row-start-3 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)] xl:col-start-3">
+        <section className={cn('flex flex-col gap-2.5 py-4 lg:col-start-2 lg:row-start-3 lg:rounded-2xl lg:bg-white lg:p-4 lg:shadow-[0_0_5px_rgba(62,165,244,0.1)]', rightCol)}>
           <div className="flex items-center justify-between">
             <span className="flex h-6 items-center rounded bg-bg px-2 text-caption">מסמכים אחרונים</span>
             {/* a new project has documents but no photos yet: open where the files are */}
