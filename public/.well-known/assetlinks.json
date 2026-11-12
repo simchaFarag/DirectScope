@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "il.co.directscope.app",
+      "sha256_cert_fingerprints": [
+        "EE:17:07:D4:AC:9E:F4:F3:52:BF:FD:3B:39:26:3F:68:3E:A9:57:F8:18:D2:3B:87:89:47:57:E7:A4:16:DF:E4"
+      ]
+    }
+  }
+]

@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The site the app opens. It must serve /.well-known/assetlinks.json with this app's signing fingerprint
+// (public/.well-known/assetlinks.json), otherwise Chrome shows an address bar on top of the app.
+def siteHost = 'directscope.212.150.53.124.nip.io'
+// local testing only: ./gradlew assembleRelease -PtestUrl=http://localhost:4173/ (with `adb reverse tcp:4173 tcp:4173`)
+def launchUrl = project.findProperty('testUrl') ?: "https://${siteHost}/"
+
+// Release signing: the upload key lives outside the repo (see twa/README.md). Without it only debug builds work.
+def keystorePropsFile = file(System.getenv('DS_KEYSTORE_PROPERTIES') ?: "${System.getProperty('user.home')}/DirectScope-signing/keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+
+android {
+    namespace 'il.co.directscope.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'il.co.directscope.app'
+        minSdk 24
+        targetSdk 36
+        // raise both for every store upload
+        versionCode 1
+        versionName '1.0.0'
+
+        resValue 'string', 'app_name', 'DirectScope'
+        resValue 'string', 'launch_url', launchUrl
+        resValue 'string', 'host_name', siteHost
+        resValue 'string', 'asset_statements',
+            "[{ \\\"relation\\\": [\\\"delegate_permission/common.handle_all_urls\\\"], \\\"target\\\": {\\\"namespace\\\": \\\"web\\\", \\\"site\\\": \\\"https://${siteHost}\\\"}}]"
+        manifestPlaceholders = [hostName: siteHost]
+    }
+
+    signingConfigs {
+        if (keystoreProps['storeFile']) {
+            release {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreProps['storeFile']) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}
