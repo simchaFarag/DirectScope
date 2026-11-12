@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useNavigate } from '@/lib/nav';
 import { Heading, SubScreen } from '@/components/layout';
+import { LocateButton } from '@/components/LocateButton';
 import { useToast } from '@/components/toast';
 import { Avatar, BottomActions, Button, Chip, Field, Lightbox, SectionTitle, UploadSlot } from '@/components/ui';
 import { useStore } from '@/data/store';
@@ -172,7 +173,10 @@ export function ProjectEdit() {
       <Heading title="עריכת פרויקט" sub="שם, כתובת ותאריכים" />
       <div className="space-y-5 px-6">
         <Field label="שם הפרויקט" value={name} onChange={(e) => setName(e.target.value)} />
-        <Field label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <div>
+          <Field label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <LocateButton onAddress={setAddress} />
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="התחלה" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
           <Field label="סיום (משוער)" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />

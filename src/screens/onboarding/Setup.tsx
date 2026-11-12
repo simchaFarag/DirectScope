@@ -2,6 +2,7 @@ import { Icon } from '@/components/FigmaIcon';
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heading, SubScreen } from '@/components/layout';
+import { LocateButton } from '@/components/LocateButton';
 import { General, StageGlyph } from '@/components/icons';
 import { BottomActions, Button, ClearField, Field, Select, UploadSlot } from '@/components/ui';
 import { useStore } from '@/data/store';
@@ -36,7 +37,10 @@ export function ProjectDetails() {
           <Select placeholder="פירוט על הפרויקט, מה בונים?" options={types} value={type} onChange={setType} />
           <Field aria-label="תיאור נוסף" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="תיאור נוסף (לא חובה)" />
         </div>
-        <Field aria-label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת הנכס" />
+        <div>
+          <Field aria-label="כתובת הנכס" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת הנכס" />
+          <LocateButton onAddress={setAddress} />
+        </div>
         <ClearField value={moneyText(budget)} onChange={(v) => setBudget(moneyInput(v))} placeholder="תקציב משוער (לא חובה)" />
       </div>
       <BottomActions>
