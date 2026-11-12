@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DirectScope</string>
+    <string name="title_activity_main">DirectScope</string>
+    <string name="package_name">il.co.directscope.app</string>
+    <string name="custom_url_scheme">il.co.directscope.app</string>
+</resources>

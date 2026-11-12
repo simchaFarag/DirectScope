@@ -7,6 +7,7 @@ import { useToast } from '@/components/toast';
 import { Avatar, BottomActions, Button, Chip, Field, Lightbox, SectionTitle, UploadSlot } from '@/components/ui';
 import { useStore } from '@/data/store';
 import { fmtDate, ils } from '@/lib/format';
+import { openFile, shareText } from '@/lib/native';
 
 function useStageName() {
   const { s } = useStore();
@@ -17,8 +18,7 @@ function useStageName() {
 function useShare() {
   const toast = useToast();
   return (title: string) => {
-    if (navigator.share) navigator.share({ title, text: `${title} – DirectScope` }).catch(() => {});
-    else toast('הקישור לשיתוף הועתק', 'info');
+    void shareText(title, `${title} – DirectScope`).then((shown) => shown || toast('הקישור לשיתוף הועתק', 'info'));
   };
 }
 
@@ -40,7 +40,7 @@ export function FileViewer({ kind }: { kind: 'doc' | 'receipt' }) {
       <div className="space-y-5 px-6 pb-6">
         {/* an image opens enlarged; a PDF / Word file has only the generic icon here – open the file itself */}
         <button
-          onClick={() => (!item.preview && item.fileUrl ? window.open(item.fileUrl, '_blank', 'noopener') : setZoom(0))}
+          onClick={() => (!item.preview && item.fileUrl ? void openFile(item.fileUrl) : setZoom(0))}
           aria-label={item.preview ? `הגדלת ${item.title}` : `פתיחת ${fileName}`}
           className="block w-full overflow-hidden rounded-lg bg-white p-4 shadow-blue"
         >
@@ -70,7 +70,7 @@ export function FileViewer({ kind }: { kind: 'doc' | 'receipt' }) {
         </dl>
       </div>
       <BottomActions>
-        <Button className="flex-1" onClick={() => (item.fileUrl ? window.open(item.fileUrl, '_blank', 'noopener') : toast('ההורדה תהיה זמינה אחרי חיבור לשרת', 'info'))}>
+        <Button className="flex-1" onClick={() => (item.fileUrl ? void openFile(item.fileUrl) : toast('ההורדה תהיה זמינה אחרי חיבור לשרת', 'info'))}>
           <Download size={16} /> הורדה
         </Button>
         <Button variant="outline" className="flex-1" onClick={() => share(item.title)}>

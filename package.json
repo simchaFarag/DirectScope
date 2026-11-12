@@ -8,15 +8,28 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "server:dev": "npm --prefix server run dev",
-    "server:build": "npm --prefix server run build"
+    "server:build": "npm --prefix server run build",
+    "cap:sync": "npm run build && cap sync",
+    "cap:android": "cap open android",
+    "cap:ios": "cap open ios",
+    "cap:assets": "capacitor-assets generate --android --ios --iconBackgroundColor \"#F7F9FC\" --splashBackgroundColor \"#F7F9FC\""
   },
   "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/share": "8.0.3",
+    "@capacitor/splash-screen": "8.0.2",
     "lucide-react": "0.441.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "6.30.6"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.3",
     "@types/react": "18.3.5",
     "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "4.3.1",

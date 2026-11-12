@@ -6,11 +6,13 @@ import App from './App';
 import { StoreProvider } from './data/store';
 import { ToastProvider } from './components/toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { initNativeApp } from './lib/native';
 import './index.css';
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+void initNativeApp();
 
 function ScrollToTop() {
   const { pathname } = useLocation();

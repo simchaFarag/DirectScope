@@ -1,0 +1,56 @@
+# Builds the native apps in the cloud (no Android Studio / Mac needed locally).
+# Android: a debug APK you can install on a phone for testing – download it from the run's "Artifacts".
+# iOS: a simulator build that checks the Xcode project compiles (store builds need an Apple Developer account).
+name: Mobile apps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'assets/**'
+      - 'public/app-offline.html'
+      - 'package.json'
+      - 'src/lib/native.ts'
+      - '.github/workflows/mobile.yml'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DirectScope-android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Build for simulator (unsigned)
+        working-directory: ios/App
+        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
