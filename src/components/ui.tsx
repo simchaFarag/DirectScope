@@ -3,6 +3,7 @@ import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttribute
 import { createPortal } from 'react-dom';
 import { pickImages } from '@/lib/files';
 import { cn } from '@/lib/format';
+import { useBackClose } from '@/lib/backClose';
 import { Icon } from './FigmaIcon';
 
 /* ---------- Buttons ---------- */
@@ -382,6 +383,7 @@ export function Select<T extends string>({ placeholder, options, value, onChange
 
 /** Centered modal (popups like FAQ, new card, exception details). Close button floats above the card, as in Figma. */
 export function Modal({ open, onClose, children, title, closeLeft }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; closeLeft?: boolean }) {
+  useBackClose(open, onClose);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
@@ -486,6 +488,7 @@ export function ConfirmDialog({
 /** Full-screen photo viewer with swipe-free prev/next */
 export function Lightbox({ images, index, onClose }: { images: { src: string; caption?: string }[]; index: number | null; onClose: () => void }) {
   const [i, setI] = useState(index ?? 0);
+  useBackClose(index !== null, onClose);
   useEffect(() => {
     if (index !== null) setI(index);
   }, [index]);
@@ -493,7 +496,8 @@ export function Lightbox({ images, index, onClose }: { images: { src: string; ca
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={onClose}>
       <div className="flex items-center justify-between p-4">
-        <span className="text-caption">
+        {/* ltr: in the RTL page "1 / 2" was drawn as "2 / 1" */}
+        <span className="text-caption" dir="ltr">
           {i + 1} / {images.length}
         </span>
         <button onClick={onClose} aria-label="סגור">

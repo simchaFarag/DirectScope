@@ -2,6 +2,7 @@ import { ChevronRight, CreditCard, FileText, Headphones, LogOut, UserCircle2, Us
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useNavigate } from '@/lib/nav';
+import { useBackClose } from '@/lib/backClose';
 import { useStore } from '@/data/store';
 import { cn } from '@/lib/format';
 import { Icon, type IconName } from './FigmaIcon';
@@ -115,6 +116,7 @@ export function BottomNav() {
 
 function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
+  useBackClose(open, onClose);
   const { s, setUser, reset } = useStore();
   const go = (to: string) => {
     onClose();
