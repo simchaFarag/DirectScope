@@ -1,7 +1,7 @@
 import type { RequestHandler, Router } from 'express';
 import type { ZodObject, ZodRawShape } from 'zod';
 import { forbidden, notFound } from './errors.js';
-import { assertStage, parse, param } from './http.js';
+import { assertStage, parse, parsePatch, param } from './http.js';
 import { me } from '../middleware/auth.js';
 import { access, requireEdit, type Access } from '../middleware/project.js';
 
@@ -74,7 +74,7 @@ export function crud<Shape extends ZodRawShape>(router: Router, path: string, o:
   router.patch(`${path}/:id`, ...guard, requireEdit, async (req, res) => {
     const a = access(req);
     const row = await own(a, param(req));
-    const data = parse(o.input.partial(), req.body) as Record<string, unknown>;
+    const data = parsePatch(o.input, req.body) as Record<string, unknown>;
     if (!mine(a, me(req).id, row)) {
       const allowed = new Set(o.sharedFields ?? []);
       if (Object.keys(data).some((k) => data[k] !== undefined && !allowed.has(k))) throw forbidden('אפשר לערוך רק פריטים שהוספת');

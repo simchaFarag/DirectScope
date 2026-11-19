@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
-import { fileRef, parse, param } from '../lib/http.js';
+import { fileRef, parse, parsePatch, param } from '../lib/http.js';
 import { normalizePhone } from '../lib/phone.js';
 import { toMember } from '../lib/serialize.js';
 import { me, requireAuth } from '../middleware/auth.js';
@@ -58,7 +58,7 @@ membersRouter.patch('/members/:id', requireOwner, async (req, res) => {
   const projectId = access(req).project.id;
   const m = await prisma.member.findFirst({ where: { id: param(req), projectId } });
   if (!m) throw notFound('השותף לא נמצא');
-  const { phone, inviteToken: token, ...rest } = parse(memberInput.partial(), req.body);
+  const { phone, inviteToken: token, ...rest } = parsePatch(memberInput, req.body);
   const phoneChanged = !!phone && mobilePhone(phone) !== m.phone;
   if (phoneChanged && normalizePhone(phone) === me(req).phone) throw badRequest('זה המספר שלך – אין צורך להזמין אותו', 'own_phone');
   const updated = await prisma.member.update({

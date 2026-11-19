@@ -7,6 +7,18 @@ import { unsigned } from './files.js';
 
 export const parse = <S extends ZodTypeAny>(schema: S, data: unknown): z.infer<S> => schema.parse(data);
 
+/**
+ * PATCH bodies: validates against `schema.partial()` and keeps only the fields the client sent. Without the filter a
+ * field's default (role "professional", color "yellow", status "todo"…) or a transform (stage "general" → null) fills in
+ * a field nobody touched and overwrites the stored value.
+ */
+export function parsePatch<T extends z.ZodRawShape>(schema: z.ZodObject<T>, body: unknown) {
+  const data = schema.partial().parse(body) as Record<string, unknown>;
+  const sent = body && typeof body === 'object' ? body : {};
+  for (const k of Object.keys(data)) if (!Object.hasOwn(sent, k)) delete data[k];
+  return data as Partial<z.output<z.ZodObject<T>>>;
+}
+
 /** "YYYY-MM-DD" in, Date (UTC midnight) out – matches MySQL DATE columns. */
 export const dateIn = z
   .string()

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { forbidden } from '../lib/errors.js';
-import { dateIn, money, parse } from '../lib/http.js';
+import { dateIn, money, parse, parsePatch } from '../lib/http.js';
 import { QUOTE_DOCS_HIDDEN } from '../lib/quotes.js';
 import * as S from '../lib/serialize.js';
 import { me, requireAuth } from '../middleware/auth.js';
@@ -123,7 +123,7 @@ project.get('/state', async (req, res) => {
 // Name, address and dates are the client's – a contractor (restricted member) changing them would do it unseen.
 project.patch('/', requireEdit, async (req, res) => {
   if (!access(req).seesBudget) throw forbidden('רק הלקוח יכול לשנות את פרטי הפרויקט');
-  const data = parse(projectFields.partial(), req.body);
+  const data = parsePatch(projectFields, req.body);
   const updated = await prisma.project.update({ where: { id: access(req).project.id }, data });
   res.json(S.toProject(updated, access(req).seesBudget));
 });

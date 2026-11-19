@@ -11,3 +11,4 @@ docs/qa-screenshots/
 # Capacitor leftovers from the mobile-app branch (the Android app on this branch is twa/)
 /android/
 /ios/
+*.tsbuildinfo

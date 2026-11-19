@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { dateIn, fileRef, money, parse, today, param } from '../lib/http.js';
+import { dateIn, fileRef, money, parse, parsePatch, today, param } from '../lib/http.js';
 import { authorTitle, toStage, toTask, toUpdate } from '../lib/serialize.js';
 import { me } from '../middleware/auth.js';
 import { access, requireBudget, requireEdit } from '../middleware/project.js';
@@ -69,7 +69,7 @@ stagesRouter.patch('/stages/:id', requireEdit, async (req, res) => {
   const a = access(req);
   if (!a.seesBudget) throw forbidden('רק הלקוח יכול לערוך את השלב');
   const before = await findStage(a.project.id, param(req));
-  const { tasks: _ignored, ...data } = parse(stageInput.partial(), req.body);
+  const { tasks: _ignored, ...data } = parsePatch(stageInput, req.body);
   // The contract sum starts equal to the budget. Until it is set apart on purpose, a budget change carries it along –
   // otherwise the contractor keeps seeing the first number for good (the app has no separate field for it).
   if (data.budget !== undefined && data.contractAmount === undefined && before.contractAmount === before.budget) data.contractAmount = data.budget;
