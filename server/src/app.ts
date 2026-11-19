@@ -23,7 +23,20 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
-  app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: { ignore: (req) => req.url === '/api/health' },
+      // the log keeps no working secrets: file-link signatures and invite tokens are cut out of the url
+      serializers: {
+        req: (r: { id: unknown; method: string; url: string }) => ({
+          id: r.id,
+          method: r.method,
+          url: r.url.replace(/\?.*$/, (q) => (/[?&](s|t)=/.test(q) ? '?…' : q)),
+        }),
+      },
+    }),
+  );
 
   app.get('/api/health', async (_req, res) => {
     try {

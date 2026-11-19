@@ -24,6 +24,8 @@ const schema = z.object({
   INFORU_TOKEN: z.string().optional(),
   // sender name shown on the phone (up to 11 English letters/digits, approved in the InforU account)
   INFORU_SMS_SENDER: z.string().optional(),
+  // all login codes sent in an hour, across all phones – caps the SMS bill if someone abuses the login screen
+  SMS_MAX_PER_HOUR: z.coerce.number().int().positive().default(300),
 
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(15),

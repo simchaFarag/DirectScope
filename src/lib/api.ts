@@ -76,11 +76,25 @@ export const auth = {
     setToken(r.token);
     return r;
   },
-  logout: () => setToken(null),
+  logout: () => {
+    setToken(null);
+    // nothing of the account stays on a shared phone: the offline cache and the last opened project go too
+    try {
+      localStorage.removeItem('directscope.lastProject');
+    } catch {
+      /* storage unavailable */
+    }
+    if (typeof caches !== 'undefined') caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
+  },
 };
 
 /** Converts a data URL (what pickImages() returns today) to a File for api.upload. */
 export async function dataUrlToFile(dataUrl: string, name = 'image.jpg') {
-  const blob = await (await fetch(dataUrl)).blob();
-  return new File([blob], name, { type: blob.type });
+  // decoded by hand: fetch(dataUrl) is refused by the site's Content-Security-Policy (connect-src has no data:)
+  const [head, body = ''] = dataUrl.split(',');
+  const type = head.match(/^data:([^;,]+)/)?.[1] ?? 'application/octet-stream';
+  const bin = head.includes(';base64') ? atob(body) : decodeURIComponent(body);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], name, { type });
 }

@@ -11,6 +11,7 @@ import { normalizePhone } from '../lib/phone.js';
 import { toUser } from '../lib/serialize.js';
 import { sendSms } from '../lib/sms.js';
 import { me, requireAuth } from '../middleware/auth.js';
+import { logger } from '../logger.js';
 
 const OTP_TTL_MS = 5 * 60_000;
 const RESEND_AFTER_MS = 30_000;
@@ -18,6 +19,14 @@ const MAX_PER_HOUR = 5;
 const MAX_ATTEMPTS = 5;
 
 const hash = (phone: string, code: string) => crypto.createHmac('sha256', config.JWT_SECRET).update(`${phone}:${code}`).digest('hex');
+
+/** Login codes are only needed for a few minutes – old rows (phone numbers of everyone who logged in) are removed. */
+let lastSweep = 0;
+async function sweepOldCodes() {
+  if (Date.now() - lastSweep < 10 * 60_000) return;
+  lastSweep = Date.now();
+  await prisma.otpCode.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 24 * 3600_000) } } }).catch(() => {});
+}
 
 export const authRouter = Router();
 
@@ -33,8 +42,18 @@ const loginLimit = rateLimit({
 
 /** login-1: send a 6-digit code to the phone */
 authRouter.post('/otp/request', loginLimit, async (req, res) => {
-  const { phone: raw } = parse(z.object({ phone: z.string() }), req.body);
+  const { phone: raw } = parse(z.object({ phone: z.string().max(30) }), req.body);
   const phone = normalizePhone(raw);
+  // codes go out by SMS, which only a mobile receives – landline numbers were sent (and paid for) for nothing
+  if (!/^\+9725\d{8}$/.test(phone)) throw badRequest('יש להזין מספר נייד', 'invalid_phone');
+
+  await sweepOldCodes();
+  // SMS cost guard: the per-phone and per-IP limits don't stop one attacker cycling many numbers through many IPs
+  const lastHour = await prisma.otpCode.count({ where: { createdAt: { gt: new Date(Date.now() - 3600_000) } } });
+  if (lastHour >= config.SMS_MAX_PER_HOUR) {
+    logger.warn({ lastHour }, 'SMS hourly cap reached – login codes paused');
+    throw tooMany('השירות עמוס כרגע, נסו שוב בעוד כמה דקות');
+  }
 
   const recent = await prisma.otpCode.findMany({
     where: { phone, createdAt: { gt: new Date(Date.now() - 3600_000) } },
