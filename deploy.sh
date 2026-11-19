@@ -23,7 +23,14 @@ if [ -n "${SITE_DIR:-}" ]; then
   echo "== web app → $SITE_DIR"
   npm ci
   npm run build
-  cp -r dist/. "$SITE_DIR"/
+  if [ -w "$SITE_DIR" ]; then
+    cp -r dist/. "$SITE_DIR"/
+  else
+    # CloudPanel's site folder belongs to the site user – copy with sudo and hand the files back to that user
+    owner="$(stat -c '%U:%G' "$SITE_DIR")"
+    sudo cp -r dist/. "$SITE_DIR"/
+    sudo chown -R "$owner" "$SITE_DIR"
+  fi
 else
   echo "== web app skipped (set SITE_DIR to also publish it)"
 fi
